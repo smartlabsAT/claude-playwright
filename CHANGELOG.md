@@ -131,4 +131,4 @@ This initial release provides a solid foundation for Claude Code + Playwright in
 
 **Full Documentation**: [README.md](./README.md)  
 **License**: [MIT](./LICENSE)  
-**Issues**: [GitHub Issues](https://github.com/smartlabs/claude-playwright/issues)
+**Issues**: [GitHub Issues](https://github.com/smartlabsAT/claude-playwright/issues)
