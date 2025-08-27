@@ -650,11 +650,10 @@ program
     }
   });
 
-if (require.main === module) {
-  program.parseAsync().catch((error) => {
-    console.error(chalk.red('❌ CLI Error:'), error.message);
-    process.exit(1);
-  });
-}
+// Always run when executed directly (not when imported as module)
+program.parseAsync(process.argv).catch((error) => {
+  console.error(chalk.red('❌ CLI Error:'), error.message);
+  process.exit(1);
+});
 
 export { program };
