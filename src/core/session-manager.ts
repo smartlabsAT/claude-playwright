@@ -384,6 +384,61 @@ export class SessionManager {
   }
   
   /**
+   * Get the currently active session name from active-session.json
+   */
+  async getActiveSession(): Promise<string | null> {
+    try {
+      const activeSessionConfig = path.join(this.sessionsDir, 'active-session.json');
+      if (!await fs.pathExists(activeSessionConfig)) {
+        return null;
+      }
+      
+      const config = await fs.readJson(activeSessionConfig);
+      return config.activeSession || null;
+    } catch (error) {
+      return null;
+    }
+  }
+  
+  /**
+   * Switch to a different session by updating active-session.json
+   */
+  async switchSession(sessionName: string): Promise<boolean> {
+    try {
+      // Check if session exists
+      const sessionFile = path.join(this.sessionsDir, `${sessionName}.json`);
+      if (!await fs.pathExists(sessionFile)) {
+        console.error(chalk.red(`Session not found: ${sessionName}`));
+        return false;
+      }
+      
+      // Update or create active-session.json
+      const activeSessionConfig = path.join(this.sessionsDir, 'active-session.json');
+      let config = {
+        activeSession: sessionName,
+        switchedAt: new Date().toISOString(),
+        availableSessions: []
+      };
+      
+      // Preserve existing config if it exists
+      if (await fs.pathExists(activeSessionConfig)) {
+        try {
+          const existingConfig = await fs.readJson(activeSessionConfig);
+          config.availableSessions = existingConfig.availableSessions || [];
+        } catch (err) {
+          // Use default config
+        }
+      }
+      
+      await fs.writeJson(activeSessionConfig, config, { spaces: 2 });
+      return true;
+    } catch (error) {
+      console.error(chalk.red('Failed to switch session:'), (error as Error).message);
+      return false;
+    }
+  }
+  
+  /**
    * Get MCP-compatible session data with environment variables
    */
   async getMCPSessionData(sessionName?: string): Promise<any> {

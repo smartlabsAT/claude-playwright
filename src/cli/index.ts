@@ -477,13 +477,50 @@ program
           }
           break;
           
+        case 'switch':
+          if (!name) {
+            // Show available sessions if no name provided
+            const sessions = await sessionManager.listSessions();
+            if (sessions.length === 0) {
+              console.log(chalk.gray('No saved sessions found'));
+            } else {
+              console.log(chalk.blue('📋 Available sessions:'));
+              for (const session of sessions) {
+                console.log(`  - ${session.name}`);
+              }
+            }
+            
+            // Show current active session
+            const activeSession = await sessionManager.getActiveSession();
+            if (activeSession) {
+              console.log(chalk.green(`\n✓ Active session: ${activeSession}`));
+            } else {
+              console.log(chalk.gray('\nNo active session'));
+            }
+            
+            console.log(chalk.gray('\nUsage: claude-playwright session switch <session-name>'));
+            return;
+          }
+          
+          // Switch to specified session
+          const switched = await sessionManager.switchSession(name);
+          if (switched) {
+            console.log(chalk.green(`✓ Switched to session: ${name}`));
+            console.log(chalk.gray('\nNote: Restart Claude Code or reconnect MCP for changes to take effect'));
+          } else {
+            console.error(chalk.red(`❌ Failed to switch to session: ${name}`));
+            process.exit(1);
+          }
+          break;
+          
         default:
           console.error(chalk.red(`❌ Unknown action: ${action}`));
-          console.log('Available actions: list, save, load, clear, delete, extend, health');
+          console.log('Available actions: list, save, load, clear, delete, extend, health, switch');
           console.log('');
           console.log('Examples:');
           console.log('  claude-playwright session save mysite --url https://example.com/login');
           console.log('  claude-playwright session list');
+          console.log('  claude-playwright session switch mysite');
           console.log('  claude-playwright session health');
           console.log('  claude-playwright session health mysite');
           console.log('  claude-playwright session extend mysite');

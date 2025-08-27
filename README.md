@@ -245,11 +245,32 @@ my-project/
 }
 ```
 
+### Dynamic Session Switching
+
+The toolkit now supports dynamic session switching for MCP integration:
+
+```bash
+# List available sessions
+claude-playwright session list
+
+# Switch active session (used by MCP server)
+claude-playwright session switch admin-user
+
+# Check current active session
+claude-playwright session switch
+```
+
+The MCP server automatically loads the active session on startup:
+1. Checks `PLAYWRIGHT_SESSION` environment variable
+2. Falls back to `active-session.json` configuration
+3. Starts without session if none configured
+
 ### Session Management Best Practices
 - Use descriptive session names (`admin-prod`, `user-staging`)
 - Regularly clean expired sessions with `session clear`
 - Test session validity before important test runs
 - Keep sessions environment-specific
+- Use `session switch` to change active session for MCP
 
 ## 🎭 Profile Management Deep Dive
 

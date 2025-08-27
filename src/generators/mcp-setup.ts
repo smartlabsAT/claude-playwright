@@ -8,19 +8,30 @@ export async function setupMCPForClaude(projectPath: string): Promise<boolean> {
   const mcpConfigPath = path.join(projectPath, '.mcp.json');
   
   try {
-    // Create MCP configuration for Claude Code with session support
+    // Copy MCP wrapper script to project
+    const wrapperSource = path.join(__dirname, '../../scripts/mcp-wrapper.js');
+    const wrapperDest = path.join(projectPath, 'scripts/mcp-wrapper.js');
+    
+    // Ensure scripts directory exists
+    await fs.ensureDir(path.join(projectPath, 'scripts'));
+    
+    // Copy wrapper if it doesn't exist
+    if (await fs.pathExists(wrapperSource)) {
+      await fs.copy(wrapperSource, wrapperDest);
+      await fs.chmod(wrapperDest, '755');
+    }
+    
+    // Create MCP configuration for Claude Code with dynamic session support
     const mcpConfig = {
       mcpServers: {
         playwright: {
-          command: 'npx',
+          command: 'node',
           args: [
-            '@playwright/mcp'
+            './scripts/mcp-wrapper.js'
           ],
           env: {
-            PLAYWRIGHT_AUTO_LOAD_SESSION: 'true',
-            PLAYWRIGHT_SESSION_TIMEOUT: '28800000',
-            PLAYWRIGHT_SESSION_AUTO_SAVE: 'true',
-            PLAYWRIGHT_SESSION_CONFIG: './playwright-sessions/.config.json'
+            // Session will be loaded from active-session.json or PLAYWRIGHT_SESSION env var
+            PLAYWRIGHT_SESSION_TIMEOUT: '28800000'
           }
         }
       }
