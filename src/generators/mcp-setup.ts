@@ -8,30 +8,41 @@ export async function setupMCPForClaude(projectPath: string): Promise<boolean> {
   const mcpConfigPath = path.join(projectPath, '.mcp.json');
   
   try {
-    // Copy MCP wrapper script to project
-    const wrapperSource = path.join(__dirname, '../../scripts/mcp-wrapper.js');
-    const wrapperDest = path.join(projectPath, 'scripts/mcp-wrapper.js');
+    // Copy MCP scripts to project
+    const scriptsSource = path.join(__dirname, '../../scripts');
+    const scriptsDest = path.join(projectPath, 'scripts');
     
     // Ensure scripts directory exists
-    await fs.ensureDir(path.join(projectPath, 'scripts'));
+    await fs.ensureDir(scriptsDest);
     
-    // Copy wrapper if it doesn't exist
+    // Copy both wrapper and interceptor
+    const wrapperSource = path.join(scriptsSource, 'mcp-wrapper.js');
+    const interceptorSource = path.join(scriptsSource, 'mcp-interceptor.js');
+    const wrapperDest = path.join(scriptsDest, 'mcp-wrapper.js');
+    const interceptorDest = path.join(scriptsDest, 'mcp-interceptor.js');
+    
     if (await fs.pathExists(wrapperSource)) {
       await fs.copy(wrapperSource, wrapperDest);
       await fs.chmod(wrapperDest, '755');
     }
     
-    // Create MCP configuration for Claude Code with dynamic session support
+    if (await fs.pathExists(interceptorSource)) {
+      await fs.copy(interceptorSource, interceptorDest);
+      await fs.chmod(interceptorDest, '755');
+    }
+    
+    // Create MCP configuration using interceptor for URL correction
     const mcpConfig = {
       mcpServers: {
         playwright: {
           command: 'node',
           args: [
-            './scripts/mcp-wrapper.js'
+            './scripts/mcp-interceptor.js'  // Use interceptor instead of wrapper
           ],
           env: {
             // Session will be loaded from active-session.json or PLAYWRIGHT_SESSION env var
-            PLAYWRIGHT_SESSION_TIMEOUT: '28800000'
+            PLAYWRIGHT_SESSION_TIMEOUT: '28800000',
+            PLAYWRIGHT_USE_INTERCEPTOR: 'true'
           }
         }
       }
