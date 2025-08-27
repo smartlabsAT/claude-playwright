@@ -117,49 +117,42 @@ function processRequest(request) {
       console.error(`[MCP Interceptor] Processing method: ${request.method}`);
     }
     
-    // Check for navigation-related methods (check various possible names)
-    const navigationMethods = [
-      'browser_navigate',
-      'playwright_navigate', 
-      'navigate',
-      'goto',
-      'page_goto',
-      'tools/call'
-    ];
-    
-    if (navigationMethods.includes(request.method)) {
-      // Correct the URL
-      if (request.params) {
-        if (request.params.url) {
-          const originalUrl = request.params.url;
-          request.params.url = correctUrl(request.params.url);
-          
-          if (originalUrl !== request.params.url) {
-            console.error(`[MCP Interceptor] Navigation corrected: ${originalUrl} → ${request.params.url}`);
-          }
-        }
+    // ALWAYS check ALL methods for URL parameters
+    // Claude might use different method names, so we check everything
+    if (request.params) {
+      // Deep search for any URL field in params
+      function correctUrlsInObject(obj, path = '') {
+        if (!obj || typeof obj !== 'object') return;
         
-        // Also check for 'uri' parameter (some versions use this)
-        if (request.params.uri) {
-          const originalUri = request.params.uri;
-          request.params.uri = correctUrl(request.params.uri);
+        for (const key in obj) {
+          const value = obj[key];
+          const currentPath = path ? `${path}.${key}` : key;
           
-          if (originalUri !== request.params.uri) {
-            console.error(`[MCP Interceptor] Navigation corrected: ${originalUri} → ${request.params.uri}`);
-          }
-        }
-        
-        // Check if it's a tool call with navigate arguments
-        if (request.params.arguments && typeof request.params.arguments === 'object') {
-          if (request.params.arguments.url) {
-            const originalUrl = request.params.arguments.url;
-            request.params.arguments.url = correctUrl(request.params.arguments.url);
+          // Check if this field might contain a URL
+          if ((key === 'url' || key === 'uri' || key === 'href' || key === 'src' || key === 'action') && typeof value === 'string') {
+            const originalUrl = value;
+            obj[key] = correctUrl(value);
             
-            if (originalUrl !== request.params.arguments.url) {
-              console.error(`[MCP Interceptor] Tool navigation corrected: ${originalUrl} → ${request.params.arguments.url}`);
+            if (originalUrl !== obj[key]) {
+              console.error(`[MCP Interceptor] URL corrected at ${currentPath}: ${originalUrl} → ${obj[key]}`);
             }
           }
+          
+          // Recursively check nested objects
+          if (value && typeof value === 'object') {
+            correctUrlsInObject(value, currentPath);
+          }
         }
+      }
+      
+      // Correct URLs anywhere in params
+      correctUrlsInObject(request.params, 'params');
+    }
+    
+    // Also check if it's a tool call (MCP standard)
+    if (request.method === 'tools/call' && request.params) {
+      if (request.params.name && request.params.name.includes('navigate')) {
+        console.error(`[MCP Interceptor] Navigation tool detected: ${request.params.name}`);
       }
     }
     
