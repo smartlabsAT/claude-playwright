@@ -110,6 +110,13 @@ program
         process.exit(1);
       }
       
+      // Create project config if it doesn't exist
+      const configPath = path.join(projectDir, 'claude-playwright.config.js');
+      if (!await fs.pathExists(configPath)) {
+        const { generateProjectConfig } = await import('../generators/project-config');
+        await generateProjectConfig(projectDir);
+      }
+      
       // Setup browser profiles and sessions
       await setupBrowserProfiles(projectDir);
       

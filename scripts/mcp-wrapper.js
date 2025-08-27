@@ -8,6 +8,7 @@
  * - Automatically loads session from active-session.json
  * - Can be overridden with PLAYWRIGHT_SESSION env variable
  * - Falls back to no session if none configured
+ * - Enforces base URL from configuration
  */
 
 const { spawn } = require('child_process');
@@ -16,6 +17,22 @@ const path = require('path');
 
 const sessionsDir = path.join(process.cwd(), 'playwright-sessions');
 const activeSessionConfig = path.join(sessionsDir, 'active-session.json');
+const projectConfigPath = path.join(process.cwd(), 'claude-playwright.config.js');
+
+// Load project configuration if exists
+let projectConfig = {
+  baseURL: process.env.BASE_URL || 'http://localhost:3000',
+  mcp: { enforceBaseURL: true }
+};
+
+if (fs.existsSync(projectConfigPath)) {
+  try {
+    projectConfig = require(projectConfigPath);
+    console.error(`[Claude-Playwright MCP] Using base URL: ${projectConfig.baseURL}`);
+  } catch (err) {
+    console.error(`[Claude-Playwright MCP] Error loading config: ${err.message}`);
+  }
+}
 
 // Determine which session to use
 let sessionName = process.env.PLAYWRIGHT_SESSION;
@@ -74,7 +91,9 @@ const child = spawn('npx', args, {
   stdio: 'inherit',
   env: {
     ...process.env,
-    PLAYWRIGHT_ACTIVE_SESSION: sessionName || 'none'
+    PLAYWRIGHT_ACTIVE_SESSION: sessionName || 'none',
+    PLAYWRIGHT_BASE_URL: projectConfig.baseURL,
+    BASE_URL: projectConfig.baseURL
   }
 });
 

@@ -68,6 +68,9 @@ export async function initProjectInteractive(): Promise<void> {
     
     await generator.generateFromTemplate(options.template, templateMetadata);
 
+    // Generate claude-playwright.config.js
+    await generateProjectConfig(projectPath);
+
     // Setup MCP configuration if requested
     if (options.configureMCP) {
       await setupBrowserProfiles(projectPath);
@@ -236,6 +239,37 @@ async function generateMCPConfig(projectPath: string) {
     config,
     { spaces: 2 }
   );
+}
+
+async function generateProjectConfig(projectPath: string) {
+  // Ask user for base URL
+  const readline = await import('readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  
+  const baseURL = await new Promise<string>((resolve) => {
+    rl.question(chalk.blue('🌐 Enter your application base URL (default: http://localhost:3000): '), (url) => {
+      rl.close();
+      resolve(url.trim() || 'http://localhost:3000');
+    });
+  });
+
+  const configSource = path.join(__dirname, '../../templates/claude-playwright.config.js');
+  const configDest = path.join(projectPath, 'claude-playwright.config.js');
+  
+  // Read template config
+  let configContent = await fs.readFile(configSource, 'utf8');
+  
+  // Replace base URL
+  configContent = configContent.replace(
+    "baseURL: process.env.BASE_URL || 'http://localhost:3000'",
+    `baseURL: process.env.BASE_URL || '${baseURL}'`
+  );
+  
+  await fs.writeFile(configDest, configContent);
+  console.log(chalk.green(`✓ Project config created with base URL: ${baseURL}`));
 }
 
 async function generateClaudeMD(projectPath: string, projectName: string) {
