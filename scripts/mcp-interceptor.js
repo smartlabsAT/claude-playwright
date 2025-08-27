@@ -29,7 +29,22 @@ let projectConfig = {
 if (fs.existsSync(projectConfigPath)) {
   try {
     projectConfig = require(projectConfigPath);
-    console.error(`[MCP Interceptor] Base URL configured: ${projectConfig.baseURL}`);
+    
+    // Validate and fix baseURL if needed
+    if (projectConfig.baseURL && !projectConfig.baseURL.startsWith('http://') && !projectConfig.baseURL.startsWith('https://')) {
+      console.error(`[MCP Interceptor] WARNING: Base URL missing protocol, adding http://`);
+      projectConfig.baseURL = `http://${projectConfig.baseURL}`;
+    }
+    
+    // Validate URL format
+    try {
+      new URL(projectConfig.baseURL);
+      console.error(`[MCP Interceptor] Base URL configured: ${projectConfig.baseURL}`);
+    } catch (urlErr) {
+      console.error(`[MCP Interceptor] ERROR: Invalid base URL format: ${projectConfig.baseURL}`);
+      console.error(`[MCP Interceptor] Using default: http://localhost:3000`);
+      projectConfig.baseURL = 'http://localhost:3000';
+    }
   } catch (err) {
     console.error(`[MCP Interceptor] Error loading config: ${err.message}`);
   }

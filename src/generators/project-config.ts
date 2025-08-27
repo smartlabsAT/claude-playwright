@@ -14,10 +14,32 @@ export async function generateProjectConfig(projectPath: string): Promise<void> 
   });
   
   const baseURL = await new Promise<string>((resolve) => {
-    rl.question(chalk.blue('🌐 Enter your application base URL (default: http://localhost:3000): '), (url) => {
-      rl.close();
-      resolve(url.trim() || 'http://localhost:3000');
-    });
+    const askForUrl = () => {
+      rl.question(chalk.blue('🌐 Enter your application base URL (default: http://localhost:3000): '), (url) => {
+        const inputUrl = url.trim() || 'http://localhost:3000';
+        
+        // Validate URL format
+        if (!inputUrl.startsWith('http://') && !inputUrl.startsWith('https://')) {
+          console.log(chalk.red('❌ URL must start with http:// or https://'));
+          console.log(chalk.yellow('   Example: http://localhost:3000 or https://example.com'));
+          askForUrl(); // Ask again
+          return;
+        }
+        
+        try {
+          // Try to parse URL to ensure it's valid
+          new URL(inputUrl);
+          rl.close();
+          resolve(inputUrl);
+        } catch (error) {
+          console.log(chalk.red('❌ Invalid URL format'));
+          console.log(chalk.yellow('   Example: http://localhost:3000 or https://example.com'));
+          askForUrl(); // Ask again
+        }
+      });
+    };
+    
+    askForUrl();
   });
 
   const configSource = path.join(__dirname, '../../templates/claude-playwright.config.js');
