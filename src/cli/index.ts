@@ -110,9 +110,26 @@ program
         process.exit(1);
       }
       
-      // Create project config if it doesn't exist
+      // Create or update project config
       const configPath = path.join(projectDir, 'claude-playwright.config.js');
-      if (!await fs.pathExists(configPath)) {
+      const configExists = await fs.pathExists(configPath);
+      
+      if (configExists) {
+        // Ask if user wants to update the base URL
+        const inquirer = (await import('inquirer')).default;
+        const { updateConfig } = await inquirer.prompt([{
+          type: 'confirm',
+          name: 'updateConfig',
+          message: 'Configuration file exists. Do you want to update the base URL?',
+          default: false
+        }]);
+        
+        if (updateConfig) {
+          const { generateProjectConfig } = await import('../generators/project-config');
+          await generateProjectConfig(projectDir);
+        }
+      } else {
+        // Create new config
         const { generateProjectConfig } = await import('../generators/project-config');
         await generateProjectConfig(projectDir);
       }
