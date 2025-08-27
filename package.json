@@ -1,6 +1,6 @@
 {
   "name": "claude-playwright",
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-alpha.6",
   "description": "Seamless integration between Claude Code and Playwright MCP for efficient browser automation and testing",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,7 +26,7 @@
     "testing",
     "automation",
     "browser-testing",
-    "session-management", 
+    "session-management",
     "page-object-model",
     "e2e-testing",
     "web-automation",
@@ -41,9 +41,9 @@
     "url": "https://smartlabs.at"
   },
   "license": "MIT",
-  "homepage": "https://github.com/smartlabs/claude-playwright#readme",
+  "homepage": "https://github.com/smartlabsAT/claude-playwright#readme",
   "bugs": {
-    "url": "https://github.com/smartlabs/claude-playwright/issues",
+    "url": "https://github.com/smartlabsAT/claude-playwright/issues",
     "email": "support@smartlabs.at"
   },
   "engines": {
@@ -77,6 +77,6 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/smartlabs/claude-playwright.git"
+    "url": "git+https://github.com/smartlabsAT/claude-playwright.git"
   }
 }
