@@ -49,26 +49,32 @@ if (!sessionName && fs.existsSync(activeSessionConfig)) {
   }
 }
 
-// Build args for underlying MCP server
-const mcpArgs = ['@playwright/mcp'];
+// Build environment for MCP server with session
+const mcpEnv = {
+  ...process.env,
+  PLAYWRIGHT_BASE_URL: projectConfig.baseURL,
+  BASE_URL: projectConfig.baseURL
+};
 
-// Add session if available
+// Add session to environment if available
 if (sessionName) {
   const sessionFile = path.join(sessionsDir, `${sessionName}.json`);
   if (fs.existsSync(sessionFile)) {
-    mcpArgs.push(`--storage-state=${sessionFile}`);
-    console.error(`[MCP Interceptor] Session loaded: ${sessionName}`);
+    // Read session data and pass through environment
+    try {
+      const sessionData = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
+      mcpEnv.PLAYWRIGHT_STORAGE_STATE = JSON.stringify(sessionData);
+      console.error(`[MCP Interceptor] Session loaded: ${sessionName}`);
+    } catch (err) {
+      console.error(`[MCP Interceptor] Failed to load session: ${err.message}`);
+    }
   }
 }
 
-// Start the actual MCP server
-const mcpProcess = spawn('npx', mcpArgs, {
+// Start the actual MCP server - no arguments needed
+const mcpProcess = spawn('npx', ['@playwright/mcp'], {
   stdio: ['pipe', 'pipe', 'pipe'],
-  env: {
-    ...process.env,
-    PLAYWRIGHT_BASE_URL: projectConfig.baseURL,
-    BASE_URL: projectConfig.baseURL
-  }
+  env: mcpEnv
 });
 
 // JSON-RPC message buffer
@@ -106,11 +112,22 @@ function correctUrl(url) {
  */
 function processRequest(request) {
   try {
-    // Check for navigation-related methods
-    if (request.method === 'browser_navigate' || 
-        request.method === 'navigate' ||
-        request.method === 'goto') {
-      
+    // Log all methods for debugging
+    if (request.method) {
+      console.error(`[MCP Interceptor] Processing method: ${request.method}`);
+    }
+    
+    // Check for navigation-related methods (check various possible names)
+    const navigationMethods = [
+      'browser_navigate',
+      'playwright_navigate', 
+      'navigate',
+      'goto',
+      'page_goto',
+      'tools/call'
+    ];
+    
+    if (navigationMethods.includes(request.method)) {
       // Correct the URL
       if (request.params) {
         if (request.params.url) {
@@ -129,6 +146,18 @@ function processRequest(request) {
           
           if (originalUri !== request.params.uri) {
             console.error(`[MCP Interceptor] Navigation corrected: ${originalUri} → ${request.params.uri}`);
+          }
+        }
+        
+        // Check if it's a tool call with navigate arguments
+        if (request.params.arguments && typeof request.params.arguments === 'object') {
+          if (request.params.arguments.url) {
+            const originalUrl = request.params.arguments.url;
+            request.params.arguments.url = correctUrl(request.params.arguments.url);
+            
+            if (originalUrl !== request.params.arguments.url) {
+              console.error(`[MCP Interceptor] Tool navigation corrected: ${originalUrl} → ${request.params.arguments.url}`);
+            }
           }
         }
       }
@@ -153,42 +182,55 @@ function processRequest(request) {
 }
 
 /**
- * Parse JSON-RPC messages from stream
+ * Parse LSP-style messages with Content-Length headers
  */
-function parseJsonRpcStream(data, buffer, callback) {
+function parseLSPMessage(data, buffer, onMessage) {
   buffer += data.toString();
-  const lines = buffer.split('\n');
-  buffer = lines.pop(); // Keep incomplete line in buffer
   
-  for (const line of lines) {
-    if (line.trim()) {
-      try {
-        // Try to parse as JSON-RPC
-        if (line.includes('Content-Length:')) {
-          // LSP-style message, extract content
-          continue;
-        }
-        
-        const message = JSON.parse(line);
-        callback(message);
-      } catch (err) {
-        // Not JSON, might be header or other output
-        if (line.trim()) {
-          process.stderr.write(line + '\n');
-        }
-      }
+  while (true) {
+    // Look for Content-Length header
+    const headerMatch = buffer.match(/Content-Length: (\d+)\r?\n/);
+    if (!headerMatch) break;
+    
+    const contentLength = parseInt(headerMatch[1]);
+    const headerEnd = buffer.indexOf('\r\n\r\n');
+    if (headerEnd === -1) break;
+    
+    const messageStart = headerEnd + 4;
+    const messageEnd = messageStart + contentLength;
+    
+    if (buffer.length < messageEnd) break; // Not enough data yet
+    
+    try {
+      const messageText = buffer.substring(messageStart, messageEnd);
+      const message = JSON.parse(messageText);
+      onMessage(message);
+    } catch (err) {
+      console.error(`[MCP Interceptor] Failed to parse message: ${err.message}`);
     }
+    
+    buffer = buffer.substring(messageEnd);
   }
   
   return buffer;
 }
 
+/**
+ * Format message for LSP transport
+ */
+function formatLSPMessage(message) {
+  const content = JSON.stringify(message);
+  const contentLength = Buffer.byteLength(content, 'utf8');
+  return `Content-Length: ${contentLength}\r\n\r\n${content}`;
+}
+
 // Handle stdin (from Claude Code)
 process.stdin.on('data', (data) => {
-  inputBuffer = parseJsonRpcStream(data, inputBuffer, (message) => {
+  inputBuffer = parseLSPMessage(data, inputBuffer, (message) => {
     // Process and forward request
     const processedMessage = processRequest(message);
-    mcpProcess.stdin.write(JSON.stringify(processedMessage) + '\n');
+    const formatted = formatLSPMessage(processedMessage);
+    mcpProcess.stdin.write(formatted);
   });
 });
 
