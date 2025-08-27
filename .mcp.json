@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium",
+        "--session-dir",
+        "./playwright-sessions",
+        "--profile-dir",
+        "./browser-profiles",
+        "--auto-load-session"
+      ],
+      "env": {
+        "PLAYWRIGHT_AUTO_LOAD_SESSION": "true",
+        "PLAYWRIGHT_SESSION_TIMEOUT": "28800000",
+        "PLAYWRIGHT_SESSION_AUTO_SAVE": "true",
+        "PLAYWRIGHT_SESSION_CONFIG": "./playwright-sessions/.config.json"
+      }
+    }
+  }
+}

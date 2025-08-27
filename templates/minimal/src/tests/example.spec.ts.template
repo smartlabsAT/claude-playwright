@@ -1,0 +1,58 @@
+import { test, expect } from '@playwright/test';
+import { BasePage } from '../pages/base/BasePage';
+
+test.describe('Example Tests', () => {
+  let basePage: BasePage;
+
+  test.beforeEach(async ({ page }) => {
+    basePage = new BasePage(page);
+  });
+
+  test('should load homepage successfully', async ({ page }) => {
+    await basePage.navigateTo('/');
+    
+    // Verify page loads
+    await expect(page).toHaveTitle(/./); // Any title
+    
+    // Take screenshot for visual verification
+    await basePage.takeScreenshot('homepage');
+  });
+
+  test('should have working navigation', async ({ page }) => {
+    await basePage.navigateTo('/');
+    
+    // Check for common elements
+    const isVisible = await basePage.isElementVisible('body');
+    expect(isVisible).toBe(true);
+    
+    // Verify network is stable
+    await basePage.waitForNetworkIdle();
+    
+    // Current URL should match expected
+    expect(basePage.getCurrentUrl()).toContain('localhost');
+  });
+
+  test('should handle basic interactions', async ({ page }) => {
+    await basePage.navigateTo('/');
+    
+    // Example of waiting for elements
+    if (await basePage.isElementVisible('button')) {
+      await basePage.clickAndWait('button');
+    }
+    
+    // Example form interaction
+    if (await basePage.isElementVisible('input[type="text"]')) {
+      await basePage.fillForm({
+        'input[type="text"]': 'test input'
+      });
+    }
+  });
+
+  test('should take screenshot on failure', async ({ page }) => {
+    await basePage.navigateTo('/');
+    
+    // This will automatically take screenshot on failure
+    // due to playwright.config.ts settings
+    await expect(page.locator('body')).toBeVisible();
+  });
+});

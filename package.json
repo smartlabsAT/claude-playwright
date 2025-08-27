@@ -1,0 +1,82 @@
+{
+  "name": "claude-playwright",
+  "version": "0.1.0-alpha.5",
+  "description": "Seamless integration between Claude Code and Playwright MCP for efficient browser automation and testing",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "claude-playwright": "./bin/claude-playwright.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node tests/test-cli-commands.js && node tests/test-installation.js",
+    "test:cli": "node tests/test-cli-commands.js",
+    "test:install": "node tests/test-installation.js",
+    "test:playwright": "playwright test",
+    "prepublishOnly": "npm run build",
+    "postinstall": "node scripts/postinstall.js",
+    "publish:alpha": "npm publish --tag alpha",
+    "publish:next": "npm publish --tag next",
+    "version:alpha": "npm version prerelease --preid=alpha"
+  },
+  "keywords": [
+    "playwright",
+    "claude",
+    "mcp",
+    "testing",
+    "automation",
+    "browser-testing",
+    "session-management", 
+    "page-object-model",
+    "e2e-testing",
+    "web-automation",
+    "cli-tool",
+    "code-generation",
+    "scaffold",
+    "browser-profiles"
+  ],
+  "author": {
+    "name": "SmartLabs",
+    "email": "support@smartlabs.at",
+    "url": "https://smartlabs.at"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/smartlabs/claude-playwright#readme",
+  "bugs": {
+    "url": "https://github.com/smartlabs/claude-playwright/issues",
+    "email": "support@smartlabs.at"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=7.0.0"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^11.0.0",
+    "fs-extra": "^11.1.1",
+    "inquirer": "^8.2.5",
+    "readline": "^1.3.0"
+  },
+  "peerDependencies": {
+    "@playwright/test": "^1.40.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/fs-extra": "^11.0.1",
+    "@types/inquirer": "^9.0.3",
+    "@types/node": "^20.5.0",
+    "typescript": "^5.1.6"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "templates",
+    "scripts",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smartlabs/claude-playwright.git"
+  }
+}

@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  playwright-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.playwright
+    volumes:
+      - ./src:/app/src:ro
+      - ./playwright.config.ts:/app/playwright.config.ts:ro
+      - ./package.json:/app/package.json:ro
+      - ./test-results:/app/test-results
+      - ./playwright-report:/app/playwright-report
+      - ./screenshots:/app/screenshots
+    environment:
+      - NODE_ENV=docker
+      - BASE_URL=http://app:3000
+      - CI=true
+    depends_on:
+      - app
+    networks:
+      - playwright-network
+    command: npm test
+
+  app:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./static:/usr/share/nginx/html:ro
+    networks:
+      - playwright-network
+
+  # Optional: Database for integration testing
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: testdb
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - playwright-network
+
+  # Optional: Redis for session testing
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - playwright-network
+
+volumes:
+  postgres_data:
+
+networks:
+  playwright-network:
+    driver: bridge

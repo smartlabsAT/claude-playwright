@@ -1,0 +1,77 @@
+# Development files
+*.ts
+!*.d.ts
+tsconfig.json
+.gitignore
+.DS_Store
+
+# Test files
+test/
+tests/
+*.test.js
+*.spec.js
+test-*.js
+*-test.js
+test-output/
+test-results/
+cli-test-results.json
+final-cli-test-results.json
+test-wrapper.js
+
+# Documentation (development phase)
+PHASE_*.md
+WEEK_*.md
+PROJECT_OVERVIEW.md
+FINAL_TEST_REPORT.md
+FINAL_CLI_TEST_REPORT.md
+USER_TEST_INSTRUCTIONS.md
+TEST_GUIDE.md
+
+# Development directories
+.idea/
+.vscode/
+.claude/
+.claude-flow/
+.hive-mind/
+browser-profiles/test-profile/
+browser-profiles/custom/
+
+# Source files (only dist is needed)
+src/
+
+# Session and auth data
+playwright-sessions/
+auth-states/
+*.session.json
+
+# Build artifacts
+*.log
+*.tgz
+npm-debug.log*
+
+# Examples during development
+examples/*.js
+examples/*.ts
+
+# Config files
+.eslintrc*
+.prettierrc*
+.editorconfig
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Keep only essential files for npm package
