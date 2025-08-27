@@ -14,14 +14,7 @@ export async function setupMCPForClaude(projectPath: string): Promise<boolean> {
         playwright: {
           command: 'npx',
           args: [
-            '@playwright/mcp@latest',
-            '--browser',
-            'chromium',
-            '--session-dir',
-            './playwright-sessions',
-            '--profile-dir',
-            './browser-profiles',
-            '--auto-load-session'
+            '@playwright/mcp'
           ],
           env: {
             PLAYWRIGHT_AUTO_LOAD_SESSION: 'true',

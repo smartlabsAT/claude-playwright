@@ -225,10 +225,7 @@ async function generateMCPConfig(projectPath: string) {
       playwright: {
         command: 'npx',
         args: [
-          '@playwright/mcp@latest',
-          '--browser=chromium',
-          '--headless=false',
-          '--user-data-dir=./browser-profiles/default'
+          '@playwright/mcp'
         ]
       }
     }

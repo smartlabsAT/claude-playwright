@@ -457,10 +457,7 @@ The toolkit automatically configures Claude Code's MCP integration:
     "playwright": {
       "command": "npx",
       "args": [
-        "@playwright/mcp@latest",
-        "--browser=chromium", 
-        "--headless=false",
-        "--user-data-dir=./browser-profiles/default"
+        "@playwright/mcp"
       ]
     }
   }

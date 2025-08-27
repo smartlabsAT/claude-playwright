@@ -1215,10 +1215,7 @@ The toolkit automatically configures MCP in `~/.claude/claude_desktop_config.jso
     "playwright": {
       "command": "npx",
       "args": [
-        "@playwright/mcp@latest",
-        "--browser=chromium",
-        "--headless=false",
-        "--user-data-dir=./browser-profiles/default"
+        "@playwright/mcp"
       ]
     }
   }
