@@ -3,6 +3,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import chalk from 'chalk';
 import * as os from 'os';
+import * as inquirer from 'inquirer';
 
 export function createMcpCommand(): Command {
   const mcp = new Command('mcp');
@@ -19,7 +20,7 @@ export function createMcpCommand(): Command {
   mcp
     .command('init')
     .description('Initialize MCP configuration for Claude Code')
-    .option('-b, --base-url <url>', 'Set base URL for browser automation', 'http://localhost:3000')
+    .option('-b, --base-url <url>', 'Set base URL for browser automation')
     .option('-f, --force', 'Overwrite existing configuration')
     .action(async (options) => {
       console.log(chalk.blue('\n🚀 Initializing MCP Configuration...\n'));
@@ -31,6 +32,37 @@ export function createMcpCommand(): Command {
       if (fs.existsSync(mcpConfigPath) && !options.force) {
         console.log(chalk.yellow('⚠️  .mcp.json already exists. Use --force to overwrite.'));
         return;
+      }
+      
+      // Determine base URL - either from option or interactive prompt
+      let baseUrl = options.baseUrl;
+      
+      if (!baseUrl) {
+        console.log(chalk.cyan('📍 Configure your application URL:\n'));
+        
+        const answers = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'baseUrl',
+            message: 'Enter your application URL:',
+            default: 'http://localhost:3000',
+            validate: (input: string) => {
+              try {
+                new URL(input);
+                return true;
+              } catch {
+                return 'Please enter a valid URL (e.g., http://localhost:3000)';
+              }
+            },
+            transformer: (input: string) => {
+              // Show the URL as they type
+              return chalk.green(input);
+            }
+          }
+        ]);
+        
+        baseUrl = answers.baseUrl;
+        console.log(''); // Add spacing after prompt
       }
       
       // Create .mcp.json configuration - server runs directly from package
@@ -58,7 +90,7 @@ export function createMcpCommand(): Command {
             command: "node",
             args: [mcpServerPath],
             env: {
-              BASE_URL: options.baseUrl
+              BASE_URL: baseUrl
             }
           }
         }
@@ -67,6 +99,7 @@ export function createMcpCommand(): Command {
       try {
         fs.writeJsonSync(mcpConfigPath, mcpConfig, { spaces: 2 });
         console.log(chalk.green('✓ Created .mcp.json configuration'));
+        console.log(chalk.gray(`  BASE_URL: ${baseUrl}`));
       } catch (error) {
         console.error(chalk.red('✗ Failed to create .mcp.json:'), (error as Error).message);
         return;
