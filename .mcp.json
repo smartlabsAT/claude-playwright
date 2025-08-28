@@ -1,15 +1,12 @@
 {
   "mcpServers": {
     "playwright": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "@playwright/mcp"
+        "/private/var/www/claude-playwright-toolkit/dist/mcp/server.cjs"
       ],
       "env": {
-        "PLAYWRIGHT_AUTO_LOAD_SESSION": "true",
-        "PLAYWRIGHT_SESSION_TIMEOUT": "28800000",
-        "PLAYWRIGHT_SESSION_AUTO_SAVE": "true",
-        "PLAYWRIGHT_SESSION_CONFIG": "./playwright-sessions/.config.json"
+        "BASE_URL": "http://localhost:4200"
       }
     }
   }
