@@ -70,6 +70,7 @@ test-wrapper.js
 
 # Claude-specific development
 .claude/
+CLAUDE.md
 .claude-flow/
 .hive-mind/
 docs-work
@@ -82,6 +83,10 @@ docs-work
 *.tgz
 .npmrc
 .yarnrc
+
+# Yalc local development
+.yalc/
+yalc.lock
 
 # Debugging
 .vscode/launch.json
