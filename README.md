@@ -1,556 +1,233 @@
-# Claude-Playwright Toolkit 🚀 (Alpha)
+# Claude Playwright 🎭
 
-> ⚠️ **ALPHA RELEASE v0.1.0-alpha.5**  
-> This is an early alpha version for testing and feedback. APIs may change between releases.  
-> Please report issues at: https://github.com/smartlabsAT/claude-playwright/issues
+**Seamless browser automation integration between Claude Code and Playwright**
 
-Seamless integration between Claude Code and Playwright MCP for efficient browser automation and testing.
+[![npm version](https://img.shields.io/npm/v/claude-playwright/alpha.svg)](https://www.npmjs.com/package/claude-playwright)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## ✨ Features
+## ✨ What is Claude Playwright?
 
-### 🎯 Browser Session Management
-- **Real Browser Sessions**: Capture and reuse actual login sessions with cookies and authentication state
-- **8-Hour Session Caching**: Automatic session expiration and extension management
-- **Profile-Based Sessions**: Associate sessions with specific browser profiles
-- **Session Validation**: Automatic expiry checking and cleanup of invalid sessions
-
-### 🎭 Browser Profile Management  
-- **Role-Based Profiles**: Pre-configured profiles for admin, user, guest, and mobile users
-- **Custom Profile Creation**: Create tailored browser profiles with specific viewport, user-agent, and permissions
-- **Profile Persistence**: Persistent browser data across test runs
-- **Profile Templates**: Quick setup with default configurations for common scenarios
-
-### 🏗️ Smart Code Generation (Scaffold Commands)
-- **Page Object Generation**: Create Playwright Page Object Model classes with BasePage inheritance
-- **Test File Generation**: Generate complete test files with proper structure and imports
-- **Fixture Generation**: Create custom test fixtures including authentication and data fixtures
-- **Template-Based**: Consistent code generation following project patterns
-
-### 🔧 MCP Integration
-- **Automatic Configuration**: Seamless setup with Claude Code MCP integration
-- **Project Templates**: Minimal, Enterprise, and Testing templates for different project needs
-- **Interactive Setup**: Guided project initialization with intelligent defaults
-
-## 📦 Installation
-
-### Alpha Version
-```bash
-# Install alpha version globally
-npm install -g claude-playwright@alpha
-
-# Or install specific alpha version
-npm install -g claude-playwright@0.1.0-alpha.5
-
-# For project installation
-npm install claude-playwright@alpha --save-dev
-```
+Claude Playwright provides Claude Code with powerful browser automation capabilities through MCP (Model Context Protocol). Control browsers, manage sessions, and automate testing - all from within Claude!
 
 ## 🚀 Quick Start
 
-### 1. Initialize Project
-```bash
-# Interactive setup (recommended)
-claude-playwright init
+### Installation
 
-# Or specify template directly
-claude-playwright init --template enterprise --dir my-project
+```bash
+# Install globally
+npm install -g claude-playwright@alpha
+
+# Or add to your project
+npm install --save-dev claude-playwright@alpha
 ```
 
-### 2. Configure MCP (if needed separately)
+### Setup MCP Integration (30 seconds!)
+
 ```bash
-claude-playwright configure-mcp
+# Initialize MCP configuration for your app
+npx claude-playwright mcp init --base-url http://localhost:3000
+
+# That's it! Restart Claude Code and you're ready
 ```
 
-### 3. Create Browser Profiles
+### Use in Claude Code
+
+After restarting Claude, you can immediately start automating:
+
+```
+"Navigate to the login page and fill in the form"
+"Take a screenshot of the dashboard" 
+"Click the submit button and wait for the success message"
+"Extract all product prices from the page"
+```
+
+Claude will use the browser automation tools to complete these tasks!
+
+## 🎯 Core Features
+
+### 🤖 20+ Browser Automation Tools for Claude
+
+All these tools are available to Claude through MCP:
+
+- **Navigation & Interaction**: Navigate, click, type, hover, drag & drop
+- **Forms**: Fill forms, select options, upload files
+- **Screenshots**: Full page, element-specific, or viewport captures
+- **Data Extraction**: Run JavaScript, get accessibility snapshots
+- **Monitoring**: Console messages, network requests
+- **Advanced**: Tab management, dialog handling, keyboard shortcuts
+
+### 🔐 Persistent Browser Sessions
+
+Save and reuse authenticated browser sessions:
+
 ```bash
-# Setup default profiles
-claude-playwright profile setup
+# Save a logged-in session (opens browser for manual login)
+npx claude-playwright session save my-app
+
+# List saved sessions
+npx claude-playwright session list
+
+# Use in Claude: "Load the my-app session and navigate to dashboard"
+```
+
+Sessions include:
+- 🍪 Cookies and authentication state
+- 📦 LocalStorage and SessionStorage
+- ⏰ 8-hour validity with auto-extension
+- 🔄 Automatic session health monitoring
+
+### 📱 Device Profiles
+
+Test on different devices and viewports:
+
+```bash
+# Setup default profiles (desktop, mobile, tablet)
+npx claude-playwright profile setup
 
 # Create custom profile
-claude-playwright profile create mobile --viewport 375x667 --role mobile_user
+npx claude-playwright profile create iphone --device mobile --viewport 390x844
+
+# List all profiles
+npx claude-playwright profile list
 ```
 
-### 4. Capture Browser Sessions
+## 💡 Real-World Examples
+
+### Example 1: Automated Login Testing
+
 ```bash
-# Save authenticated session - opens real browser for login
-claude-playwright session save admin-session
-
-# List all sessions
-claude-playwright session list
-
-# Load session in tests
-claude-playwright session load admin-session
+# Save your app's login session once
+npx claude-playwright session save myapp --url https://myapp.com/login
 ```
 
-## 📋 CLI Commands
+Then in Claude:
+> "Load the myapp session, navigate to the user settings, change the theme to dark mode, and take a screenshot"
 
-### Project Initialization
+### Example 2: E2E Testing Workflow
 
-| Command | Description | Options |
-|---------|-------------|---------|
-| `init` | Initialize new project with MCP integration | `--template`, `--dir`, `--name` |
-| `configure-mcp` | Setup MCP without full project init | `--dir` |
+```bash
+# Setup profiles for different user types
+npx claude-playwright profile create customer --device desktop
+npx claude-playwright profile create admin --device desktop
+```
+
+In Claude:
+> "Using the customer profile, go through the complete checkout flow and verify the order confirmation appears"
+
+### Example 3: Web Scraping
+
+In Claude:
+> "Navigate to the products page, extract all product names and prices into a table"
+
+## 📋 All CLI Commands
+
+### MCP Management
+```bash
+npx claude-playwright mcp init          # Initialize MCP config
+npx claude-playwright mcp status        # Check MCP server status
+npx claude-playwright mcp docs          # View documentation
+```
 
 ### Session Management
-
-| Command | Description | Example |
-|---------|-------------|---------|
-| `session save <name>` | Capture real browser session | `session save admin-login` |
-| `session load <name>` | Load saved session | `session load admin-login` |
-| `session list` | Show all sessions with status | `session list` |
-| `session clear` | Remove expired sessions | `session clear` |
-| `session delete <name>` | Delete specific session | `session delete old-session` |
+```bash
+npx claude-playwright session list      # List all sessions
+npx claude-playwright session save <name>   # Save new session
+npx claude-playwright session load <name>   # Load session
+npx claude-playwright session delete <name> # Delete session
+npx claude-playwright session health        # Check session validity
+npx claude-playwright session extend <name> # Extend expiring session
+```
 
 ### Profile Management
-
-| Command | Description | Example |
-|---------|-------------|---------|
-| `profile setup` | Create default profiles | `profile setup` |
-| `profile create <name>` | Create custom profile | `profile create tablet --role tablet_user` |
-| `profile list` | Show all profiles | `profile list` |
-| `profile delete <name>` | Remove profile | `profile delete old-profile` |
-
-### Code Generation
-
-| Command | Description | Example |
-|---------|-------------|---------|
-| `scaffold page <name>` | Generate Page Object Model | `scaffold page LoginPage` |
-| `scaffold test <name>` | Generate test file | `scaffold test auth-flow` |
-| `scaffold fixture <name>` | Generate test fixture | `scaffold fixture AuthFixture` |
-
-## 💡 Usage Examples
-
-### Browser Session Workflow
 ```bash
-# 1. Save session after manual login
-claude-playwright session save user-session
-
-# 2. Use in Playwright tests
+npx claude-playwright profile setup     # Create default profiles
+npx claude-playwright profile list      # List profiles
+npx claude-playwright profile create <name> # Create custom profile
+npx claude-playwright profile show <name>   # View profile details
+npx claude-playwright profile delete <name> # Delete profile
 ```
-```typescript
-// In your test
-import { SessionManager } from 'claude-playwright';
-
-test('authenticated test', async ({ browser }) => {
-  const sessionManager = new SessionManager();
-  const storageState = await sessionManager.loadSession('user-session');
-  
-  const context = await browser.newContext({ storageState });
-  const page = await context.newPage();
-  
-  // User is now logged in!
-  await page.goto('/dashboard');
-});
-```
-
-### Profile-Based Testing
-```bash
-# Create mobile profile
-claude-playwright profile create mobile --viewport 375x667 --role mobile_user
-```
-```typescript
-// Use in tests
-import { BrowserProfileManager } from 'claude-playwright';
-
-test('mobile test', async ({ browser }) => {
-  const profileManager = new BrowserProfileManager();
-  const profile = await profileManager.loadProfile('mobile');
-  
-  const context = await browser.newContext({
-    userAgent: profile.settings.userAgent,
-    viewport: profile.settings.viewport
-  });
-});
-```
-
-### Code Generation Workflow
-```bash
-# Generate Page Object
-claude-playwright scaffold page LoginPage --path src/pages
-
-# Generate corresponding test
-claude-playwright scaffold test login-flow --path src/tests
-
-# Generate auth fixture
-claude-playwright scaffold fixture AuthFixture --path src/fixtures
-```
-
-## 🏗️ Project Structure
-
-### Minimal Template
-```
-my-project/
-├── src/
-│   ├── pages/
-│   │   └── base/
-│   │       └── BasePage.ts
-│   └── tests/
-│       └── example.spec.ts
-├── playwright-sessions/          # Session storage
-├── browser-profiles/             # Profile data
-├── playwright.config.ts
-├── CLAUDE.md                     # Claude Code instructions
-└── package.json
-```
-
-### Enterprise Template
-```
-my-project/
-├── src/
-│   ├── pages/
-│   │   ├── base/
-│   │   │   ├── BasePage.ts
-│   │   │   └── BaseComponent.ts
-│   │   └── components/
-│   ├── fixtures/
-│   │   ├── AuthFixture.ts
-│   │   └── BaseFixture.ts
-│   ├── utils/
-│   │   ├── DataGenerator.ts
-│   │   ├── ApiHelpers.ts
-│   │   └── TestHelpers.ts
-│   └── tests/
-├── playwright-sessions/
-├── browser-profiles/
-├── playwright-auth/
-├── docker-compose.yml
-├── .github/workflows/tests.yml
-├── CLAUDE.md
-└── package.json
-```
-
-## 🎯 Session Management Deep Dive
-
-### How It Works
-1. **Manual Login**: `session save` opens a real browser where you manually log in
-2. **State Capture**: Captures cookies, localStorage, sessionStorage, and other auth data
-3. **Secure Storage**: Saves session data with 8-hour expiration
-4. **Test Integration**: Load sessions in tests for authenticated scenarios
-
-### Session Data Format
-```json
-{
-  "name": "admin-session",
-  "createdAt": 1647875400000,
-  "expiresAt": 1647904200000,
-  "storageState": {
-    "cookies": [...],
-    "origins": [...]
-  },
-  "metadata": {
-    "url": "https://app.example.com/dashboard",
-    "userAgent": "Mozilla/5.0...",
-    "viewport": { "width": 1920, "height": 1080 }
-  }
-}
-```
-
-### Dynamic Session Switching
-
-The toolkit now supports dynamic session switching for MCP integration:
-
-```bash
-# List available sessions
-claude-playwright session list
-
-# Switch active session (used by MCP server)
-claude-playwright session switch admin-user
-
-# Check current active session
-claude-playwright session switch
-```
-
-The MCP server automatically loads the active session on startup:
-1. Checks `PLAYWRIGHT_SESSION` environment variable
-2. Falls back to `active-session.json` configuration
-3. Starts without session if none configured
-
-### Session Management Best Practices
-- Use descriptive session names (`admin-prod`, `user-staging`)
-- Regularly clean expired sessions with `session clear`
-- Test session validity before important test runs
-- Keep sessions environment-specific
-- Use `session switch` to change active session for MCP
-
-## 🎭 Profile Management Deep Dive
-
-### Default Profiles
-
-| Profile | Viewport | User Agent | Use Case |
-|---------|----------|------------|----------|
-| `admin` | 1920x1080 | Desktop Chrome | Administrator testing |
-| `user` | 1366x768 | Desktop Chrome | Standard user scenarios |
-| `guest` | 1280x720 | Desktop Chrome | Anonymous user testing |
-| `mobile` | 375x667 | Mobile Safari | Mobile device simulation |
-
-### Custom Profile Creation
-```bash
-# Desktop profile with specific settings
-claude-playwright profile create designer \
-  --viewport 2560x1440 \
-  --role designer \
-  --description "High-res designer workflow"
-
-# Mobile profile with touch support  
-claude-playwright profile create android \
-  --viewport 412x915 \
-  --role mobile_user \
-  --description "Android device simulation"
-```
-
-## 🏗️ Scaffold System Deep Dive
-
-### Generated Page Object Structure
-```typescript
-// Generated by: scaffold page LoginPage
-import { Page, expect } from '@playwright/test';
-import { BasePage } from './base-page';
-
-export class LoginPage extends BasePage {
-  // Locators - using data-testid for stability
-  private readonly emailInput = '[data-testid="email"]';
-  private readonly passwordInput = '[data-testid="password"]';
-  private readonly submitButton = '[data-testid="login-submit"]';
-  
-  constructor(page: Page) {
-    super(page);
-  }
-  
-  // Navigation methods
-  async goto() {
-    await this.navigateTo('/login');
-  }
-  
-  // Action methods
-  async login(email: string, password: string) {
-    await this.fillForm({
-      [this.emailInput]: email,
-      [this.passwordInput]: password
-    });
-    await this.clickAndWait(this.submitButton);
-  }
-  
-  // Assertion methods
-  async expectLoginForm() {
-    await expect(this.page.locator(this.emailInput)).toBeVisible();
-    await expect(this.page.locator(this.passwordInput)).toBeVisible();
-  }
-}
-```
-
-### Generated Test Structure
-```typescript
-// Generated by: scaffold test auth-flow
-import { test, expect } from '@playwright/test';
-import { BasePage } from '../pages/base-page';
-
-test.describe('Auth Flow Tests', () => {
-  let basePage: BasePage;
-  
-  test.beforeEach(async ({ page }) => {
-    basePage = new BasePage(page);
-    await basePage.navigateTo('/');
-  });
-  
-  test('should complete login flow', async ({ page }) => {
-    // Add your test implementation
-    await expect(page).toHaveTitle(/Login/);
-  });
-  
-  test('should handle logout', async ({ page }) => {
-    // Add logout test
-    await expect(page.locator('[data-testid="logout"]')).toBeVisible();
-  });
-});
-```
-
-### Generated Fixture Structure
-```typescript
-// Generated by: scaffold fixture AuthFixture  
-import { test as base, expect } from '@playwright/test';
-import { BasePage } from '../pages/base-page';
-import { SessionManager } from 'claude-playwright';
-
-export interface AuthFixtures {
-  authenticatedPage: BasePage;
-  sessionManager: SessionManager;
-}
-
-export const test = base.extend<AuthFixtures>({
-  authenticatedPage: async ({ page }, use) => {
-    const sessionManager = new SessionManager();
-    const storageState = await sessionManager.loadSession('default-user');
-    
-    await page.context().addCookies(storageState.cookies || []);
-    const authPage = new BasePage(page);
-    
-    await use(authPage);
-  },
-  
-  sessionManager: async ({}, use) => {
-    const manager = new SessionManager();
-    await use(manager);
-  }
-});
-
-export { expect } from '@playwright/test';
-```
-
-## 🎨 Template System
-
-### Available Templates
-
-#### Minimal Template
-- Basic Playwright setup
-- Simple Page Object Model
-- Essential test structure
-- Minimal dependencies
-
-#### Enterprise Template  
-- Advanced Playwright configuration
-- Component-based architecture
-- Docker and CI/CD integration
-- Authentication fixtures
-- Data generation utilities
-- Performance testing setup
-
-#### Testing Template
-- Testing-focused configuration
-- Advanced fixtures and utilities
-- Custom test helpers
-- Assertion libraries
 
 ## 🔧 Configuration
 
-### Environment Variables
-```bash
-# Session management
-PLAYWRIGHT_SESSIONS_DIR=./custom-sessions
-PLAYWRIGHT_SESSION_EXPIRY=24  # hours
+### MCP Configuration (.mcp.json)
 
-# Profile management  
-BROWSER_PROFILES_DIR=./custom-profiles
-
-# MCP configuration
-CLAUDE_MCP_CONFIG_PATH=~/.claude/claude_desktop_config.json
-```
-
-### Playwright Configuration Integration
-```typescript
-// playwright.config.ts - Generated configuration
-import { defineConfig } from '@playwright/test';
-
-export default defineConfig({
-  // Session and profile integration
-  use: {
-    // Persistent browser profiles
-    launchOptions: {
-      args: ['--user-data-dir=./browser-profiles/default']
-    },
-    
-    // Session state management
-    storageState: process.env.SESSION_STATE_PATH,
-  },
-  
-  // Multiple profile projects
-  projects: [
-    {
-      name: 'desktop-chrome',
-      use: { ...devices['Desktop Chrome'] }
-    },
-    {
-      name: 'mobile-safari', 
-      use: { ...devices['iPhone 12'] }
-    }
-  ]
-});
-```
-
-## 🔗 Integration with Claude Code
-
-### MCP Configuration
-The toolkit automatically configures Claude Code's MCP integration:
+The MCP configuration is automatically created during init:
 
 ```json
-// ~/.claude/claude_desktop_config.json
 {
   "mcpServers": {
     "playwright": {
-      "command": "npx",
-      "args": [
-        "@playwright/mcp"
-      ]
+      "command": "node",
+      "args": ["node_modules/claude-playwright/dist/mcp/server.cjs"],
+      "env": {
+        "BASE_URL": "http://localhost:3000"
+      }
     }
   }
 }
 ```
 
-### CLAUDE.md Templates
-Each template includes optimized Claude Code instructions:
+### Environment Variables
 
-- **Minimal**: Focus on basic Page Object patterns
-- **Enterprise**: Comprehensive enterprise development patterns  
-- **Testing**: Testing-specific best practices and utilities
+- `BASE_URL`: Your application's base URL (set during init)
+- `PLAYWRIGHT_HEADLESS`: Run browsers in headless mode (default: false)
+- `PLAYWRIGHT_SLOW_MO`: Slow down operations by specified ms
 
-## 🚨 Troubleshooting
+## 🏗️ Architecture
 
-### Common Issues
-
-#### Session Not Loading
-```bash
-# Check session status
-claude-playwright session list
-
-# Verify session data
-cat ./playwright-sessions/session-name.json
-
-# Clear expired sessions
-claude-playwright session clear
 ```
-
-#### Profile Issues
-```bash
-# List available profiles
-claude-playwright profile list
-
-# Recreate default profiles
-claude-playwright profile setup
-
-# Check profile data
-ls -la ./browser-profiles/
-```
-
-#### MCP Configuration Issues
-```bash
-# Reconfigure MCP
-claude-playwright configure-mcp
-
-# Check Claude configuration
-cat ~/.claude/claude_desktop_config.json
+claude-playwright/
+├── CLI Tool           # Command-line interface for setup and management
+├── MCP Server         # Provides browser tools to Claude Code
+├── Session Manager    # Handles browser session persistence
+└── Profile Manager    # Manages device and viewport configurations
 ```
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Submit a pull request
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+```bash
+# Clone the repo
+git clone https://github.com/smartlabsAT/claude-playwright.git
+
+# Install dependencies
+npm install
+
+# Build the project
+npm run build
+
+# Run tests
+npm test
+```
+
+## 📚 Documentation
+
+- [MCP Server Documentation](docs/MCP_SERVER.md) - Detailed MCP integration guide
+- [API Reference](docs/API.md) - Complete API documentation
+- [Examples](examples/) - More usage examples
+
+## 🐛 Troubleshooting
+
+### MCP Server Not Connecting
+1. Ensure `.mcp.json` exists in your project root
+2. Restart Claude Code after configuration changes
+3. Check the BASE_URL matches your application
+4. Run `npx claude-playwright mcp status` to verify setup
+
+### Sessions Not Working
+1. Check session validity: `npx claude-playwright session health`
+2. Extend expiring sessions: `npx claude-playwright session extend <name>`
+3. Sessions are stored globally in `~/.claude-playwright/sessions/`
+
+### Need Help?
+- 📖 Check our [documentation](https://github.com/smartlabsAT/claude-playwright#readme)
+- 🐛 Report issues on [GitHub](https://github.com/smartlabsAT/claude-playwright/issues)
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT © [Smartlabs](https://smartlabs.at)
 
-## 🔧 Development
+---
 
-### Building from Source
-```bash
-git clone https://github.com/smartlabsAT/claude-playwright.git
-cd claude-playwright-toolkit
-npm install
-npm run build
-```
-
-### Running Tests  
-```bash
-npm test
-```
+**Made with ❤️ by [Smartlabs](https://smartlabs.at)**

@@ -1,98 +1,69 @@
-# Claude-Playwright Toolkit - Example Code
+# Claude Playwright - Examples
 
-This directory contains comprehensive examples demonstrating all Phase 1.6 features of the Claude-Playwright Toolkit.
+This directory contains practical examples demonstrating the core features of Claude Playwright.
 
 ## 📁 Directory Structure
 
 ```
 examples/
 ├── README.md                    # This file
-├── session-management/          # Real browser session examples
-├── profile-management/          # Browser profile examples  
-├── scaffold-examples/           # Code generation examples
-├── integration-examples/        # Complete integration workflows
-└── advanced-patterns/          # Advanced usage patterns
+├── session-management/          # Browser session examples
+└── profile-management/          # Browser profile examples  
 ```
 
-## 🚀 Quick Start Examples
+## 🚀 Quick Examples
 
-### 1. Session Management Workflow
+### Session Management
+
+```javascript
+// Save a session with the CLI
+// npx claude-playwright session save myapp --url https://myapp.com/login
+
+// Then use in your tests
+const { SessionManager } = require('claude-playwright');
+
+const sessionManager = new SessionManager('.');
+const sessionData = await sessionManager.loadSession('myapp');
+
+// Session data includes cookies, localStorage, etc.
+```
+
+### Profile Management
+
+```javascript
+// Setup default profiles
+// npx claude-playwright profile setup
+
+// Use profiles in tests
+const { ProfileManager } = require('claude-playwright');
+
+const profileManager = new ProfileManager();
+const mobileProfile = await profileManager.getProfile('mobile');
+
+// Profile includes viewport, user agent, etc.
+```
+
+### MCP Integration in Claude Code
+
+After setting up MCP:
 ```bash
-# Navigate to session examples
-cd examples/session-management
-
-# Run the complete workflow
-./run-session-workflow.sh
+npx claude-playwright mcp init --base-url http://localhost:3000
 ```
 
-### 2. Profile-Based Testing
-```bash
-# Navigate to profile examples
-cd examples/profile-management
+You can use these commands in Claude:
+- "Navigate to the login page"
+- "Click the submit button"
+- "Take a screenshot of the dashboard"
+- "Extract all product prices from the page"
 
-# Test with different profiles
-npm run test:profiles
-```
+## 📚 More Examples
 
-### 3. Code Generation
-```bash
-# Navigate to scaffold examples
-cd examples/scaffold-examples
+For complete examples, see:
+- [Session Management Examples](session-management/)
+- [Profile Management Examples](profile-management/)
 
-# Generate complete page objects and tests
-./generate-examples.sh
-```
+## 🔗 Documentation
 
-## 📚 Example Categories
-
-### Session Management Examples
-- **basic-session-capture.js** - Simple session save/load
-- **authenticated-testing.js** - Using sessions in tests
-- **session-validation.js** - Session integrity checking
-- **multi-environment-sessions.js** - Environment-specific sessions
-
-### Profile Management Examples
-- **default-profiles.js** - Using built-in profiles
-- **custom-profiles.js** - Creating custom configurations
-- **profile-switching.js** - Dynamic profile changes
-- **mobile-testing.js** - Mobile device simulation
-
-### Scaffold System Examples
-- **page-generation/** - Complete page object examples
-- **test-generation/** - Test file generation
-- **fixture-generation/** - Custom fixtures
-- **component-generation/** - UI component scaffolding
-
-### Integration Examples
-- **complete-workflow/** - End-to-end testing workflow
-- **ci-cd-integration/** - Continuous integration setup
-- **docker-examples/** - Containerized testing
-- **mcp-integration/** - Claude Code MCP examples
-
-## 🎯 Learning Path
-
-1. **Start Here**: `session-management/basic-session-capture.js`
-2. **Authentication**: `session-management/authenticated-testing.js`
-3. **Profiles**: `profile-management/default-profiles.js`
-4. **Generation**: `scaffold-examples/page-generation/`
-5. **Advanced**: `integration-examples/complete-workflow/`
-
-## 💡 Tips for Using Examples
-
-- Each example includes detailed comments explaining the code
-- Run examples in order for best learning experience
-- Modify examples to match your specific use cases
-- Check console output for detailed explanations
-
-## 🤝 Contributing Examples
-
-Want to add more examples? Please:
-
-1. Follow the existing structure and naming conventions
-2. Include comprehensive comments
-3. Add corresponding test files
-4. Update this README with your example
-
----
-
-**Note**: All examples are designed to work with the Phase 1.6 implementation of the toolkit.
+- [Full Documentation](../README.md)
+- [API Reference](../docs/api.md)
+- [MCP Server Guide](../docs/MCP_SERVER.md)
