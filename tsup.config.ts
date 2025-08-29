@@ -10,6 +10,9 @@ export default defineConfig([
     sourcemap: true,
     clean: true,
     splitting: false,
+    bundle: true, // Bundle dependencies for CLI
+    external: ['better-sqlite3', 'playwright', /^node:/], // Keep these external
+    noExternal: ['lru-cache', 'chalk', 'commander', 'fs-extra'], // Bundle these
     outDir: 'dist/cli'
   },
   // MCP Server (will be TypeScript soon)
@@ -21,8 +24,9 @@ export default defineConfig([
     sourcemap: true,
     clean: false, // Don't clean since CLI already did
     splitting: false,
-    bundle: false, // Don't bundle dependencies
-    external: ['@modelcontextprotocol/sdk', 'playwright', 'zod', /^node:/],
+    bundle: true, // Bundle local dependencies
+    external: ['@modelcontextprotocol/sdk', 'playwright', 'zod', 'better-sqlite3', /^node:/],
+    noExternal: ['lru-cache', 'chalk', 'fs-extra'],
     outDir: 'dist/mcp',
     outExtension({ format }) {
       return {
