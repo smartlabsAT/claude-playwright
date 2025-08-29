@@ -1,6 +1,6 @@
 {
   "name": "claude-playwright",
-  "version": "0.1.0-alpha.18",
+  "version": "0.1.0-alpha.19",
   "description": "Seamless integration between Claude Code and Playwright MCP for efficient browser automation and testing",
   "main": "dist/index.cjs",
   "types": "dist/index.d.ts",
