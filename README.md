@@ -6,6 +6,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > ⚠️ **ALPHA RELEASE** - This package is currently in active development. We expect to release a stable version in the coming weeks with additional features including comprehensive testing frameworks and further cache system optimizations. Use with caution in development environments.
+> 
+> ⭐ **[Star this repository](https://github.com/smartlabsAT/claude-playwright)** and **[follow us](https://github.com/smartlabsAT)** to stay updated and not miss the official release!
 
 ## ✨ What is Claude Playwright?
 
@@ -229,7 +231,7 @@ npm test
 ## 📚 Documentation
 
 - **[MCP Server Documentation](docs/MCP_SERVER.md)** - Detailed MCP integration guide  
-- **[Caching System Overview](docs/CACHING.md)** - Performance optimization through intelligent caching
+- **[Advanced Caching System](docs/CACHING.md)** - Complete documentation for AI-aware bidirectional caching with universal selector fallbacks
 - **[API Reference](docs/API.md)** - Complete API documentation
 - **[Examples](examples/)** - More usage examples
 
