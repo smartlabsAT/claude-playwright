@@ -8,6 +8,7 @@ import { SessionManager } from '../core/session-manager';
 import { MCPIntegration } from '../utils/mcp-integration';
 import { autoExtendSessionIfNeeded, promptForUrl, saveRealSession } from './session-commands';
 import { listProfiles, createProfile, setupDefaultProfiles, showProfile, deleteProfile } from './profile-commands';
+import { showCacheInfo, clearCache, showCacheHealth, debugCache } from './cache-commands';
 import { createMcpCommand } from '../commands/mcp';
 
 const program = new Command();
@@ -378,6 +379,48 @@ program
       
     } catch (error: any) {
       console.error(chalk.red('❌ Status check failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// Cache Management Commands
+program
+  .command('cache <action>')
+  .description('Manage browser automation cache system')
+  .option('--force', 'Force operation without confirmation (for clear action)')
+  .action(async (action, options) => {
+    try {
+      switch (action) {
+        case 'info':
+        case 'status':
+          await showCacheInfo();
+          break;
+          
+        case 'clear':
+          await clearCache({ force: options.force });
+          break;
+          
+        case 'health':
+          await showCacheHealth();
+          break;
+          
+        case 'debug':
+          await debugCache();
+          break;
+          
+        default:
+          console.error(chalk.red(`❌ Unknown action: ${action}`));
+          console.log('Available actions: info, clear, health, debug');
+          console.log('');
+          console.log('Examples:');
+          console.log('  claude-playwright cache info         # Show cache statistics');
+          console.log('  claude-playwright cache clear        # Clear all cached data');
+          console.log('  claude-playwright cache health       # Check cache system health');
+          console.log('  claude-playwright cache debug        # Show debug information');
+          process.exit(1);
+      }
+    } catch (error) {
+      console.error(chalk.red('❌ Cache command failed:'), error instanceof Error ? error.message : String(error));
       process.exit(1);
     }
   });
