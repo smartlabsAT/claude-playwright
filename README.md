@@ -5,9 +5,13 @@
 [![npm version](https://img.shields.io/npm/v/claude-playwright/alpha.svg)](https://www.npmjs.com/package/claude-playwright)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> ⚠️ **ALPHA RELEASE** - This package is currently in active development. We expect to release a stable version in the coming weeks with additional features including comprehensive testing frameworks and further cache system optimizations. Use with caution in development environments.
+> 
+> ⭐ **[Star this repository](https://github.com/smartlabsAT/claude-playwright)** and **[follow us](https://github.com/smartlabsAT)** to stay updated and not miss the official release!
+
 ## ✨ What is Claude Playwright?
 
-Claude Playwright provides Claude Code with powerful browser automation capabilities through MCP (Model Context Protocol). Control browsers, manage sessions, and automate testing - all from within Claude!
+Claude Playwright provides Claude Code with powerful browser automation capabilities through MCP (Model Context Protocol). Control browsers, manage sessions, and automate testing - all from within Claude Code!
 
 ## 🚀 Quick Start
 
@@ -53,8 +57,22 @@ All these tools are available to Claude through MCP:
 - **Forms**: Fill forms, select options, upload files
 - **Screenshots**: Full page, element-specific, or viewport captures
 - **Data Extraction**: Run JavaScript, get accessibility snapshots
-- **Monitoring**: Console messages, network requests
+- **Monitoring**: Console messages, network requests, cache statistics
 - **Advanced**: Tab management, dialog handling, keyboard shortcuts
+
+### 🚀 ** Bidirectional Cache System** 
+
+**BREAKTHROUGH:** AI-aware intelligent caching with **universal selector fallbacks** achieving.
+
+#### 🎯 **Production-Ready Features (Latest Enhancements):**
+- **🧠 AI-Aware Input Recognition**: Understands "click" = "press" = "tap" = "select" = "delete" = "löschen"  
+- **🔄 Bidirectional Lookup**: Input → Selector and Selector → Inputs mapping with cross-session learning
+- **🛠️ Early Syntax Fixing**: `button:text("Delete")` → `button:has-text("Delete")` automatically 
+- **🌐 Universal Element Support**: Works with buttons, links, divs, spans, **any clickable element**
+- **⚡  Fallback Strategies**: CSS, ARIA, text content, click handlers, framework agnostic
+- **🌍 Multilingual Support**: German, English synonyms (delete/löschen, first/erste, task/aufgabe)
+- **📊 Enhanced Debug Logging**: Real-time fallback attempt tracking with performance metrics
+
 
 ### 🔐 Persistent Browser Sessions
 
@@ -147,6 +165,15 @@ npx claude-playwright profile show <name>   # View profile details
 npx claude-playwright profile delete <name> # Delete profile
 ```
 
+### 🧠 **Cache Management (NEW!)**
+```bash
+npx claude-playwright cache info        # Show cache statistics and performance
+npx claude-playwright cache clear       # Clear all cached selectors
+npx claude-playwright cache clear --force   # Clear without confirmation
+npx claude-playwright cache health      # Check cache system health
+npx claude-playwright cache debug       # Show debug information
+```
+
 ## 🔧 Configuration
 
 ### MCP Configuration (.mcp.json)
@@ -203,9 +230,10 @@ npm test
 
 ## 📚 Documentation
 
-- [MCP Server Documentation](docs/MCP_SERVER.md) - Detailed MCP integration guide
-- [API Reference](docs/API.md) - Complete API documentation
-- [Examples](examples/) - More usage examples
+- **[MCP Server Documentation](docs/MCP_SERVER.md)** - Detailed MCP integration guide  
+- **[Advanced Caching System](docs/CACHING.md)** - Complete documentation for AI-aware bidirectional caching with universal selector fallbacks
+- **[API Reference](docs/API.md)** - Complete API documentation
+- **[Examples](examples/)** - More usage examples
 
 ## 🐛 Troubleshooting
 
@@ -229,5 +257,6 @@ npm test
 MIT © [Smartlabs](https://smartlabs.at)
 
 ---
+
 
 **Made with ❤️ by [Smartlabs](https://smartlabs.at)**
