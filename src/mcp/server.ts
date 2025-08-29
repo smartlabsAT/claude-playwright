@@ -6,6 +6,7 @@ import { z } from "zod";
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { EnhancedCacheIntegration } from '../core/enhanced-cache-integration.js';
 
 // __dirname is available in CommonJS mode
 
@@ -54,6 +55,9 @@ interface SessionData {
       value: string;
     }>;
   }>;
+  // Enhanced session data for better restoration
+  currentUrl?: string | null;
+  timestamp?: number;
 }
 
 interface FormField {
@@ -72,6 +76,9 @@ const server = new McpServer({
 let browser: Browser | null = null;
 let context: BrowserContext | null = null;
 let page: Page | null = null;
+
+// Enhanced cache integration
+let enhancedCache: EnhancedCacheIntegration | null = null;
 
 // Event collectors
 let consoleMessages: ConsoleMessageEntry[] = [];
@@ -122,8 +129,16 @@ async function saveSession(sessionName: string): Promise<boolean> {
   
   try {
     const storageState = await context.storageState();
-    fs.writeFileSync(sessionFile, JSON.stringify(storageState, null, 2));
-    console.error(`[Claude-Playwright MCP] Saved session: ${sessionName}`);
+    
+    // Add current URL to session for better restore UX
+    const enhancedSession = {
+      ...storageState,
+      currentUrl: page?.url() || null,
+      timestamp: Date.now()
+    };
+    
+    fs.writeFileSync(sessionFile, JSON.stringify(enhancedSession, null, 2));
+    console.error(`[Claude-Playwright MCP] Saved session: ${sessionName} (URL: ${enhancedSession.currentUrl})`);
     return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -222,23 +237,29 @@ function setupPageListeners(page: Page): void {
 
 // Initialize browser with optional session
 async function ensureBrowser(sessionName: string | null = null): Promise<Page> {
+  // Launch browser if not exists
   if (!browser) {
     console.error('[Claude-Playwright MCP] Launching browser...');
     browser = await chromium.launch({ 
       headless: false,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
-    
+  }
+  
+  // Create context (either first time or when switching sessions)
+  if (!context) {
     // Load session if provided
     let storageState: any = undefined;
+    let session: SessionData | null = null;
     if (sessionName) {
-      const session = await loadSession(sessionName);
+      session = await loadSession(sessionName);
       if (session) {
         storageState = session;
-        console.error(`[Claude-Playwright MCP] Using session: ${sessionName}`);
+        console.error(`[Claude-Playwright MCP] Loading session: ${sessionName}`);
       }
     }
     
+    console.error(`[Claude-Playwright MCP] Creating new context${sessionName ? ` with session: ${sessionName}` : ''}...`);
     context = await browser.newContext({
       baseURL: BASE_URL,
       viewport: { width: 1280, height: 720 },
@@ -251,8 +272,19 @@ async function ensureBrowser(sessionName: string | null = null): Promise<Page> {
     page = await context.newPage();
     setupPageListeners(page);
     
-    console.error('[Claude-Playwright MCP] Browser launched successfully');
+    // Navigation will be handled after context creation in session restore
+    
+    // Initialize enhanced cache integration
+    if (!enhancedCache) {
+      enhancedCache = EnhancedCacheIntegration.getInstance();
+    }
+    const currentUrl = page.url();
+    enhancedCache.setPage(page, currentUrl, sessionName || undefined);
+    console.error(`[Claude-Playwright MCP] Enhanced cache system initialized for ${currentUrl}`);
+    
+    console.error(`[Claude-Playwright MCP] Context ready${sessionName ? ` with session: ${sessionName}` : ''}`);
   }
+  
   return page!;
 }
 
@@ -588,29 +620,33 @@ server.tool(
   },
   async ({ sessionName }) => {
     try {
-      // Close existing browser if open
-      if (browser) {
-        console.error('[Claude-Playwright MCP] Closing existing browser to load session...');
+      // Optimize: Only close context, keep browser instance alive
+      if (browser && context) {
+        console.error(`[Claude-Playwright MCP] Switching to session: ${sessionName} (keeping browser alive)...`);
         if (page) await page.close();
         if (context) await context.close();
-        if (browser) await browser.close();
-        browser = null;
         context = null;
         page = null;
         clearCollectedData();
       }
       
-      // Launch browser with session
+      // Launch browser with session (reuses existing browser if available)
       await ensureBrowser(sessionName);
       
-      // Get current cookies to verify
-      const cookies = await context!.cookies();
-      const hasCookies = cookies.length > 0;
+      // CRITICAL: Auto-navigate AFTER browser is ready (not just during context creation)
+      const session = await loadSession(sessionName);
+      if (session?.origins && session.origins.length > 0 && page) {
+        const origin = session.origins[0].origin;
+        console.error(`[Claude-Playwright MCP] Post-restore navigation to: ${origin}`);
+        await page.goto(origin, { waitUntil: 'domcontentloaded' });
+        console.error(`[Claude-Playwright MCP] Navigation completed - ready for interactions`);
+      }
       
+      // Simplified response - skip extra checks for speed
       return {
         content: [{
           type: "text",
-          text: `Session "${sessionName}" restored successfully.\nCookies loaded: ${cookies.length}\nBrowser ready with authenticated state.`
+          text: `Session "${sessionName}" restored successfully.\nBrowser ready with authenticated state.`
         }]
       };
     } catch (error) {
@@ -742,6 +778,12 @@ server.tool(
       const title = await page.title();
       const currentUrl = page.url();
       
+      // Update cache context with new URL
+      if (enhancedCache) {
+        enhancedCache.setPage(page, currentUrl);
+        console.error(`[Cache] Context updated for ${currentUrl}`);
+      }
+      
       return {
         content: [{
           type: "text",
@@ -762,7 +804,7 @@ server.tool(
   }
 );
 
-// Tool: browser_click
+// Tool: browser_click (Enhanced with Bidirectional Cache)
 server.tool(
   "browser_click",
   "Click an element on the page",
@@ -771,21 +813,42 @@ server.tool(
   },
   async ({ selector }) => {
     const page = await ensureBrowser();
+    
+    if (!enhancedCache) {
+      // Fallback to direct operation
+      await page.click(selector, { timeout: 5000 });
+      return {
+        content: [{
+          type: "text",
+          text: `Clicked element: ${selector} (no cache)`
+        }]
+      };
+    }
+
     try {
-      // Try CSS selector first, then text
-      try {
-        await page.click(selector, { timeout: 5000 });
-      } catch {
-        // Fallback to text selector
-        await page.click(`text="${selector}"`, { timeout: 5000 });
-      }
+      const operation = async (resolvedSelector: string) => {
+        await page.click(resolvedSelector, { timeout: 5000 });
+        return true;
+      };
+
+      // PURE CACHE APPROACH - NO selector logic in MCP!
+      // The cache system handles ALL selector intelligence
+      const result = await enhancedCache.wrapSelectorOperation(
+        selector, // Human-readable input
+        operation,
+        selector  // Let cache figure out the best selector
+      );
+
+      const cacheStatus = result.cached ? '(cached)' : '(learned)';
+      const performance = result.performance.duration;
       
       return {
         content: [{
           type: "text",
-          text: `Clicked element: ${selector}`
+          text: `Clicked element: ${selector} ${cacheStatus} [${performance}ms]`
         }]
       };
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
@@ -809,12 +872,58 @@ server.tool(
   },
   async ({ selector, text }) => {
     const page = await ensureBrowser();
-    try {
+    
+    if (!enhancedCache) {
+      // Fallback to direct operation
       await page.fill(selector, text);
       return {
         content: [{
           type: "text",
-          text: `Typed "${text}" into ${selector}`
+          text: `Typed "${text}" into ${selector} (no cache)`
+        }]
+      };
+    }
+
+    try {
+      const operation = async (resolvedSelector: string) => {
+        return await page.fill(resolvedSelector, text);
+      };
+
+      // Try enhanced cache with input field strategies
+      let result;
+      try {
+        result = await enhancedCache.wrapSelectorOperation(
+          selector,
+          operation,
+          selector
+        );
+      } catch {
+        // Fallback for input fields
+        const inputSelector = `input[placeholder*="${selector}"]`;
+        try {
+          result = await enhancedCache.wrapSelectorOperation(
+            selector,
+            operation,
+            inputSelector
+          );
+        } catch {
+          // Last fallback: general input
+          const generalSelector = 'input[type="text"], input[type="email"], textarea';
+          result = await enhancedCache.wrapSelectorOperation(
+            selector,
+            operation,
+            generalSelector
+          );
+        }
+      }
+
+      const cacheStatus = result.cached ? '(cached)' : '(learned)';
+      const performance = result.performance.duration;
+      
+      return {
+        content: [{
+          type: "text",
+          text: `Typed "${text}" into ${selector} ${cacheStatus} [${performance}ms]`
         }]
       };
     } catch (error) {
@@ -838,7 +947,15 @@ server.tool(
   async () => {
     const page = await ensureBrowser();
     try {
-      const snapshot = await page.accessibility.snapshot();
+      // Try to get cached snapshot first
+      let snapshot;
+      if (enhancedCache) {
+        snapshot = await enhancedCache.getOrCreateSnapshot();
+        console.error('[Cache] Using cached or newly created snapshot');
+      } else {
+        snapshot = await page.accessibility.snapshot();
+      }
+      
       const title = await page.title();
       const url = page.url();
       
@@ -911,6 +1028,76 @@ server.tool(
         content: [{
           type: "text",
           text: `Screenshot failed: ${errorMessage}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Tool: browser_cache_status (Enhanced Bidirectional Cache)
+server.tool(
+  "browser_cache_status",
+  "Get enhanced cache statistics and debug information",
+  {},
+  async () => {
+    try {
+      if (!enhancedCache) {
+        return {
+          content: [{
+            type: "text",
+            text: "Enhanced cache not initialized"
+          }]
+        };
+      }
+      
+      const metrics = await enhancedCache.getMetrics();
+      const health = await enhancedCache.healthCheck();
+      
+      let report = "=== Enhanced Cache Status ===\n";
+      report += `System: ${metrics.overview?.systemType || 'Enhanced Bidirectional'}\n`;
+      report += `Current URL: ${metrics.overview?.currentUrl || 'N/A'}\n`;
+      report += `Profile: ${metrics.overview?.currentProfile || 'default'}\n`;
+      report += `Navigation Count: ${metrics.overview?.navigationCount || 0}\n`;
+      report += `Health: ${health.status.toUpperCase()}\n\n`;
+      
+      report += "=== Performance Metrics ===\n";
+      if (metrics.performance) {
+        report += `Overall Hit Rate: ${metrics.performance.overallHitRate?.toFixed(1) || 0}%\n`;
+        report += `Memory Hit Rate: ${metrics.performance.memoryHitRate?.toFixed(1) || 0}%\n`;
+        report += `SQLite Hit Rate: ${metrics.performance.sqliteHitRate?.toFixed(1) || 0}%\n`;
+        report += `Total Requests: ${metrics.performance.totalRequests || 0}\n`;
+        report += `Memory Usage: ${metrics.performance.memorySize || 0}/${metrics.performance.memoryMax || 100}\n\n`;
+      }
+      
+      report += "=== Storage Statistics ===\n";
+      if (metrics.storage) {
+        report += `Unique Selectors: ${Math.round(metrics.storage.unique_selectors) || 0}\n`;
+        report += `Total Mappings: ${metrics.storage.total_mappings || 0}\n`;
+        report += `Avg Success Count: ${(metrics.storage.avg_success_count || 0).toFixed(1)}\n`;
+        report += `Variations per Selector: ${(metrics.storage.avg_inputs_per_selector || 0).toFixed(1)}\n`;
+        report += `Learning Rate: ${(metrics.storage.learning_rate || 0).toFixed(1)}%\n\n`;
+      }
+      
+      if (metrics.recommendations && metrics.recommendations.length > 0) {
+        report += "=== Recommendations ===\n";
+        for (const rec of metrics.recommendations) {
+          report += `• ${rec}\n`;
+        }
+      }
+      
+      return {
+        content: [{
+          type: "text",
+          text: report
+        }]
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{
+          type: "text",
+          text: `Enhanced cache status failed: ${errorMessage}`
         }],
         isError: true
       };
