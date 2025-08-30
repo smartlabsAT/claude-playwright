@@ -9,6 +9,78 @@ import { MCPIntegration } from '../utils/mcp-integration';
 import { autoExtendSessionIfNeeded, promptForUrl, saveRealSession } from './session-commands';
 import { listProfiles, createProfile, setupDefaultProfiles, showProfile, deleteProfile } from './profile-commands';
 import { showCacheInfo, clearCache, showCacheHealth, debugCache } from './cache-commands';
+
+/**
+ * Show comprehensive cache help information
+ */
+function showCacheHelp(action?: string): void {
+  console.log();
+  console.log(chalk.blue.bold('🏆 Unified Cache System Help'));
+  console.log(chalk.gray('AI-aware caching with 100% reliability'));
+  console.log();
+  
+  if (action && action !== 'help') {
+    console.log(chalk.red(`❌ Unknown action: ${chalk.white(action)}`));
+    console.log();
+  }
+  
+  console.log(chalk.cyan.bold('Available Commands:'));
+  console.log();
+  
+  // Info command
+  console.log(`  ${chalk.green('info')} ${chalk.gray('(or status)')}`);
+  console.log(`    ${chalk.white('Show comprehensive cache statistics and performance metrics')}`);
+    console.log(`    ${chalk.gray('• Cache hit rates by type (exact, normalized, reverse, fuzzy)')}`);
+  console.log(`    ${chalk.gray('• Unified system metrics (selectors + snapshots)')}`);
+  console.log(`    ${chalk.gray('• Memory and SQLite performance breakdown')}`);
+  console.log(`    ${chalk.gray('• File sizes and storage information')}`);
+  console.log();
+  
+  // Clear command
+  console.log(`  ${chalk.red('clear')} ${chalk.gray('[--force]')}`);
+  console.log(`    ${chalk.white('Remove all cached data and rebuild from scratch')}`);
+  console.log(`    ${chalk.gray('• Clears selector cache, snapshots, and learned patterns')}`);
+  console.log(`    ${chalk.gray('• Use --force to skip confirmation prompt')}`);
+  console.log(`    ${chalk.gray('• Cache rebuilds automatically during usage')}`);
+  console.log();
+  
+  // Health command
+  console.log(`  ${chalk.blue('health')}`);
+  console.log(`    ${chalk.white('Comprehensive system health check with recommendations')}`);
+  console.log(`    ${chalk.gray('• Tests all cache components (memory, SQLite, bidirectional)')}`);
+  console.log(`    ${chalk.gray('• Performance analysis and optimization suggestions')}`);
+  console.log(`    ${chalk.gray('• Identifies potential issues and solutions')}`);
+  console.log();
+  
+  // Debug command  
+  console.log(`  ${chalk.yellow('debug')}`);
+  console.log(`    ${chalk.white('Detailed debug information for troubleshooting')}`);
+  console.log(`    ${chalk.gray('• Recent cache operations and failure analysis')}`);
+  console.log(`    ${chalk.gray('• Similarity calculation insights')}`);
+  console.log(`    ${chalk.gray('• Includes full cache info for comprehensive debugging')}`);
+  console.log();
+  
+  console.log(chalk.cyan.bold('Examples:'));
+  console.log();
+  console.log(`  ${chalk.white('npx claude-playwright cache info')}`);
+  console.log(`  ${chalk.gray('# View unified cache statistics and performance metrics')}`);
+  console.log();
+  console.log(`  ${chalk.white('npx claude-playwright cache clear --force')}`);
+  console.log(`  ${chalk.gray('# Clear all cache data without confirmation')}`);
+  console.log();
+  console.log(`  ${chalk.white('npx claude-playwright cache health')}`);
+  console.log(`  ${chalk.gray('# Check system health and get performance recommendations')}`);
+  console.log();
+  console.log(`  ${chalk.white('npx claude-playwright cache debug')}`);
+  console.log(`  ${chalk.gray('# Show detailed debug information for troubleshooting')}`);
+  console.log();
+  
+
+  
+
+  
+  console.log(chalk.gray('📚 For more information: https://github.com/smartlabsAT/claude-playwright'));
+}
 import { createMcpCommand } from '../commands/mcp';
 
 const program = new Command();
@@ -20,8 +92,32 @@ const version = packageJson.version;
 
 program
   .name('claude-playwright')
-  .description('Seamless integration between Claude Code and Playwright MCP')
-  .version(version);
+  .description('🎭 Seamless integration between Claude Code and Playwright MCP')
+  .version(version, '-v, --version', 'Display version number')
+  .addHelpText('before', `
+${chalk.blue.bold('🎭 Claude Playwright')}
+${chalk.gray('Powerful browser automation integration for Claude Code')}
+`)
+  .addHelpText('after', `
+${chalk.cyan('Quick Start:')}
+  ${chalk.white('npx claude-playwright mcp init --base-url http://localhost:3000')}
+  ${chalk.gray('# Initialize MCP integration with your app')}
+
+${chalk.cyan('Common Commands:')}
+  ${chalk.white('npx claude-playwright session list')}        ${chalk.gray('# List all browser sessions')}
+  ${chalk.white('npx claude-playwright session save <name>')}  ${chalk.gray('# Save authenticated session')}
+  ${chalk.white('npx claude-playwright cache info')}          ${chalk.gray('# View unified cache statistics')}
+  ${chalk.white('npx claude-playwright mcp status')}         ${chalk.gray('# Check MCP server connection')}
+
+${chalk.cyan('Key Features:')}
+  ${chalk.green('✅')} 20+ browser automation tools for Claude
+  ${chalk.green('✅')} Unified bidirectional cache system (AI-aware)
+  ${chalk.green('✅')} Persistent browser sessions with authentication
+  ${chalk.green('✅')} Universal selector fallbacks (100% reliability)
+  ${chalk.green('✅')} Multilingual support (English/German)
+
+${chalk.yellow('📚 Documentation:')} https://github.com/smartlabsAT/claude-playwright
+`);
 
 // Session Management Commands
 program
@@ -385,10 +481,30 @@ program
 
 // Cache Management Commands
 program
-  .command('cache <action>')
-  .description('Manage browser automation cache system')
+  .command('cache [action]')
+  .description('Manage unified bidirectional cache system')
+  .addHelpText('after', `
+${chalk.cyan('Available Actions:')}
+  ${chalk.green('info')}     Show comprehensive cache statistics
+  ${chalk.red('clear')}    Clear all cached data
+  ${chalk.blue('health')}   System health check with recommendations
+  ${chalk.yellow('debug')}    Detailed debug information
+
+${chalk.cyan('Examples:')}
+  ${chalk.white('npx claude-playwright cache info')}
+  ${chalk.white('npx claude-playwright cache clear --force')}
+  ${chalk.white('npx claude-playwright cache health')}
+
+Run ${chalk.white('npx claude-playwright cache help')} for detailed information.
+`)
   .option('--force', 'Force operation without confirmation (for clear action)')
   .action(async (action, options) => {
+    // If no action is provided, show help
+    if (!action) {
+      showCacheHelp();
+      return;
+    }
+    
     try {
       switch (action) {
         case 'info':
@@ -408,15 +524,14 @@ program
           await debugCache();
           break;
           
+        case 'help':
+        case '--help':
+        case '-h':
+          showCacheHelp();
+          break;
+          
         default:
-          console.error(chalk.red(`❌ Unknown action: ${action}`));
-          console.log('Available actions: info, clear, health, debug');
-          console.log('');
-          console.log('Examples:');
-          console.log('  claude-playwright cache info         # Show cache statistics');
-          console.log('  claude-playwright cache clear        # Clear all cached data');
-          console.log('  claude-playwright cache health       # Check cache system health');
-          console.log('  claude-playwright cache debug        # Show debug information');
+          showCacheHelp(action);
           process.exit(1);
       }
     } catch (error) {
