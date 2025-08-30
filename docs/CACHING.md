@@ -254,9 +254,10 @@ npx claude-playwright cache debug
 ⚡ Hit Rate: 87.3% (last 1000 operations)
 🧠 Learning: 23 auto-discovered patterns
 
-=== Legacy Cache (v1 - Snapshots) ===
+=== Unified Snapshot System (v2 - Integrated) ===
 📷 Snapshots: 12 entries (18.7 MB, 30min TTL)
 🔄 Hit Rate: 73.2%
+🆕 NEW: Profile isolation, DOM hash validation, unified metrics
 
 💡 Recommendations:
   ✅ Cache system healthy - excellent performance

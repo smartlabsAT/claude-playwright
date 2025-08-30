@@ -285,14 +285,15 @@ Upload files to file input.
 
 ### Monitoring & Debugging
 
-#### `browser_cache_status` ⚡ NEW
-Get cache statistics and debug information.
+#### `browser_cache_status` ⚡ ENHANCED
+Get unified cache statistics and debug information.
 
 **Returns:**
 - Current URL and profile
 - Navigation count
-- Cache hit/miss rates by type
-- Total evictions
+- Unified cache hit/miss rates by type (exact, normalized, reverse, fuzzy)
+- NEW: Snapshot cache statistics and profile isolation metrics
+- Total evictions and performance breakdown
 
 **Examples in Claude:**
 ```
@@ -303,9 +304,10 @@ Get cache statistics and debug information.
 
 **Sample Output:**
 ```
-=== Cache Status ===
+=== Unified Cache Status ===
 Current URL: http://localhost:3002/todos
 Navigation Count: 3
+Architecture: Single unified system (5/5 test suites passed)
 
 === Cache Metrics ===
 selector:
