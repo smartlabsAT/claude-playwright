@@ -29,6 +29,91 @@ if (!fs.existsSync(testCacheDir)) {
 
 console.log('🧪 Starting Bidirectional Cache Tests...');
 
+// Test 0: Snapshot functionality
+async function testSnapshotCache() {
+  console.log('\n📸 Testing Snapshot Cache...');
+  
+  const cache = new BidirectionalCache({
+    maxSizeMB: 10,
+    snapshotTTL: 30000 // 30 seconds for testing
+  });
+  
+  let passed = 0;
+  let failed = 0;
+  
+  try {
+    // Test 1: Basic snapshot set/get
+    const testSnapshot = {
+      name: 'root',
+      children: [{ name: 'button', role: 'button' }]
+    };
+    
+    const key = { url: 'http://test.com', domHash: 'test-hash-123' };
+    
+    await cache.setSnapshot(key, testSnapshot, {
+      url: 'http://test.com',
+      profile: 'test-profile'
+    });
+    
+    const retrieved = await cache.getSnapshot(key, 'test-profile');
+    
+    if (JSON.stringify(retrieved) === JSON.stringify(testSnapshot)) {
+      console.log('  ✅ Basic snapshot set/get works');
+      passed++;
+    } else {
+      console.log('  ❌ Basic snapshot set/get failed');
+      failed++;
+    }
+    
+    // Test 2: Profile isolation
+    const retrieved2 = await cache.getSnapshot(key, 'different-profile');
+    if (retrieved2 === null) {
+      console.log('  ✅ Profile isolation works');
+      passed++;
+    } else {
+      console.log('  ❌ Profile isolation failed');
+      failed++;
+    }
+    
+    // Test 3: TTL expiration (short TTL)
+    const shortCache = new BidirectionalCache({ snapshotTTL: 1 }); // 1ms
+    await shortCache.setSnapshot(key, testSnapshot, { url: 'http://test.com' });
+    
+    // Wait for expiration
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
+    const expired = await shortCache.getSnapshot(key);
+    if (expired === null) {
+      console.log('  ✅ TTL expiration works');
+      passed++;
+    } else {
+      console.log('  ❌ TTL expiration failed');
+      failed++;
+    }
+    
+    shortCache.close();
+    
+    // Test 4: Snapshot metrics
+    const metrics = await cache.getSnapshotMetrics();
+    if (metrics && typeof metrics.total_snapshots === 'number') {
+      console.log('  ✅ Snapshot metrics work');
+      passed++;
+    } else {
+      console.log('  ❌ Snapshot metrics failed');
+      failed++;
+    }
+    
+  } catch (error) {
+    console.error('  ❌ Snapshot test error:', error.message);
+    failed++;
+  } finally {
+    cache.close();
+  }
+  
+  console.log(`  📊 Snapshot Cache: ${passed} passed, ${failed} failed`);
+  return failed === 0;
+}
+
 // Test 1: SmartNormalizer
 async function testSmartNormalizer() {
   console.log('\n📝 Testing SmartNormalizer...');
@@ -353,6 +438,7 @@ async function performanceBenchmark() {
 async function runAllTests() {
   const results = [];
   
+  results.push(await testSnapshotCache());
   results.push(await testSmartNormalizer());
   results.push(await testBidirectionalCache());
   results.push(await testTieredCache());

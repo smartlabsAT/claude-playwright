@@ -1,15 +1,11 @@
 import { Page } from 'playwright';
 import { BidirectionalCache } from './bidirectional-cache.js';
 import { TieredCache } from './tiered-cache.js';
-import { SnapshotCache } from './snapshot-cache.js';
-import { CacheManager } from './cache-manager.js';
 
 export class EnhancedCacheIntegration {
   private static instance: EnhancedCacheIntegration | null = null;
   private bidirectionalCache: BidirectionalCache;
   private tieredCache: TieredCache;
-  private snapshotCache: SnapshotCache;
-  private legacyCacheManager: CacheManager;
   private currentPage?: Page;
   private currentUrl: string = '';
   private currentProfile?: string;
@@ -31,14 +27,6 @@ export class EnhancedCacheIntegration {
       preloadCommonSelectors: true
     });
 
-    // Keep legacy cache manager for snapshots
-    this.legacyCacheManager = new CacheManager({
-      maxSizeMB: 25, // Reduced since selectors moved to bidirectional
-      snapshotTTL: 1800000, // 30 minutes
-      cleanupInterval: 60000
-    });
-    
-    this.snapshotCache = new SnapshotCache(this.legacyCacheManager);
     
     console.error('[EnhancedCache] Initialized bidirectional cache system');
   }
@@ -55,8 +43,6 @@ export class EnhancedCacheIntegration {
     this.currentUrl = url;
     this.currentProfile = profile;
     
-    // Setup snapshot cache context
-    this.snapshotCache.setContext(page, url, profile);
     
     // Setup page event listeners for cache invalidation
     this.setupPageListeners(page);
@@ -76,11 +62,6 @@ export class EnhancedCacheIntegration {
       }
     });
 
-    // Track DOM changes for snapshot invalidation
-    page.on('load', async () => {
-      console.error('[EnhancedCache] Page loaded, checking for changes...');
-      await this.snapshotCache.invalidateIfChanged();
-    });
   }
 
   private async handleNavigation(newUrl: string): Promise<void> {
@@ -92,9 +73,6 @@ export class EnhancedCacheIntegration {
     // Update current URL
     this.currentUrl = newUrl;
     
-    if (this.currentPage) {
-      this.snapshotCache.setContext(this.currentPage, newUrl, this.currentProfile);
-    }
     
     console.error(`[EnhancedCache] Navigation handled, count: ${this.navigationCount}`);
   }
@@ -146,17 +124,80 @@ export class EnhancedCacheIntegration {
     }
   }
 
-  // Snapshot operations (legacy integration)
+  // Snapshot operations (using bidirectional cache)
   async getCachedSnapshot(): Promise<any | null> {
-    return await this.snapshotCache.getCachedSnapshot();
+    if (!this.currentPage) return null;
+    
+    try {
+      // Create cache key from current URL and DOM hash
+      const domHash = await this.computeDomHash();
+      const key = { url: this.currentUrl, domHash };
+      
+      return await this.bidirectionalCache.getSnapshot(key, this.currentProfile);
+    } catch (error) {
+      console.error('[EnhancedCache] Get snapshot error:', error);
+      return null;
+    }
   }
 
   async cacheSnapshot(snapshot: any): Promise<void> {
-    await this.snapshotCache.cacheSnapshot(snapshot);
+    if (!this.currentPage) return;
+    
+    try {
+      const domHash = await this.computeDomHash();
+      const key = { url: this.currentUrl, domHash };
+      
+      await this.bidirectionalCache.setSnapshot(key, snapshot, {
+        url: this.currentUrl,
+        profile: this.currentProfile
+      });
+      
+      console.error(`[EnhancedCache] Cached snapshot for ${this.currentUrl}`);
+    } catch (error) {
+      console.error('[EnhancedCache] Cache snapshot error:', error);
+    }
   }
 
   async getOrCreateSnapshot(): Promise<any> {
-    return await this.snapshotCache.getOrCreateSnapshot();
+    // First try to get cached snapshot
+    const cached = await this.getCachedSnapshot();
+    if (cached) {
+      return cached;
+    }
+    
+    // Create new snapshot if page exists
+    if (!this.currentPage) {
+      throw new Error('No page context available for snapshot');
+    }
+    
+    try {
+      const snapshot = await this.currentPage.accessibility.snapshot();
+      await this.cacheSnapshot(snapshot);
+      return snapshot;
+    } catch (error) {
+      console.error('[EnhancedCache] Create snapshot error:', error);
+      throw error;
+    }
+  }
+
+  private async computeDomHash(): Promise<string> {
+    if (!this.currentPage) return 'no-page';
+    
+    try {
+      // Simple DOM fingerprint based on structure
+      const domStructure = await this.currentPage.evaluate(() => {
+        const elements = document.querySelectorAll('*');
+        const tags = Array.from(elements).map(el => el.tagName.toLowerCase());
+        return tags.slice(0, 50).join(','); // First 50 elements
+      });
+      
+      // Create hash of DOM structure
+      const crypto = require('crypto');
+      return crypto.createHash('md5').update(domStructure).digest('hex');
+    } catch (error) {
+      console.error('[EnhancedCache] DOM hash error:', error);
+      return `error-${Date.now()}`;
+    }
   }
 
   // Advanced learning capabilities
@@ -201,7 +242,8 @@ export class EnhancedCacheIntegration {
         },
         storage: {
           ...bidirectionalStats.storage,
-          operations: bidirectionalStats.operations
+          operations: bidirectionalStats.operations,
+          snapshots: bidirectionalStats.snapshots
         },
         recommendations: this.generateRecommendations(tieredStats, bidirectionalStats)
       };
@@ -252,7 +294,6 @@ export class EnhancedCacheIntegration {
   // Additional CLI-specific methods
   async clearAll(): Promise<void> {
     await this.tieredCache.clear();
-    await this.legacyCacheManager.clear();
     console.error('[EnhancedCache] All caches cleared completely');
   }
 
@@ -308,7 +349,6 @@ export class EnhancedCacheIntegration {
 
   close(): void {
     this.tieredCache.close();
-    this.legacyCacheManager.close();
     EnhancedCacheIntegration.instance = null;
     console.error('[EnhancedCache] System closed');
   }
