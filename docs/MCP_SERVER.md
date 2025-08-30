@@ -285,15 +285,14 @@ Upload files to file input.
 
 ### Monitoring & Debugging
 
-#### `browser_cache_status` ⚡ ENHANCED
-Get unified cache statistics and debug information.
+#### `browser_cache_status` ⚡ NEW
+Get cache statistics and debug information.
 
 **Returns:**
 - Current URL and profile
 - Navigation count
-- Unified cache hit/miss rates by type (exact, normalized, reverse, fuzzy)
-- NEW: Snapshot cache statistics and profile isolation metrics
-- Total evictions and performance breakdown
+- Cache hit/miss rates by type
+- Total evictions
 
 **Examples in Claude:**
 ```

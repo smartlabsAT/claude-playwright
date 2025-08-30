@@ -15,8 +15,6 @@ Claude Playwright provides Claude Code with powerful browser automation capabili
 
 ## 🚀 Quick Start
 
-> **🆕 UNIFIED CACHE**: Now includes revolutionary unified cache system with **100% reliability** across all element types and **52% performance improvement**!
-
 ### Installation
 
 ```bash
@@ -61,23 +59,22 @@ All these tools are available to Claude through MCP:
 - **Forms**: Fill forms, select options, upload files
 - **Screenshots**: Full page, element-specific, or viewport captures
 - **Data Extraction**: Run JavaScript, get accessibility snapshots
-- **Monitoring**: Console messages, network requests, **unified cache statistics**
+- **Monitoring**: Console messages, network requests,
 - **Advanced**: Tab management, dialog handling, keyboard shortcuts
 
-### 🚀 **Unified Bidirectional Cache System (MAJOR ARCHITECTURE UPGRADE)** 
+### 🚀 ** Bidirectional Cache System ** 
 
-**REVOLUTIONARY BREAKTHROUGH:** Complete architecture migration to unified cache system with **enhanced performance** and **simplified architecture**.
+** BREAKTHROUGH:** Complete architecture migration to unified cache system with **enhanced performance** and **simplified architecture**.
 
-#### 🎯 **Unified System Features (2025-08-30 Migration):**
+#### 🎯 **Unified System Features:**
 - **🏗️ UNIFIED ARCHITECTURE**: Single cache system for selectors + snapshots + all metadata (1560+ legacy lines eliminated)
 - **🧠 AI-Aware Input Recognition**: Understands "click" = "press" = "tap" = "select" = "delete" = "löschen"  
 - **🔄 Bidirectional Lookup**: Input → Selector and Selector → Inputs mapping with cross-session learning
 - **🛠️ Early Syntax Fixing**: `button:text("Delete")` → `button:has-text("Delete")` automatically 
 - **🌐 Universal Element Support**: Works with buttons, links, divs, spans, **any clickable element**
-- **⚡ 25+ Fallback Strategies**: CSS, ARIA, text content, click handlers, framework agnostic
+- **⚡  Fallback Strategies**: CSS, ARIA, text content, click handlers, framework agnostic
 - **🌍 Multilingual Support**: German, English synonyms (delete/löschen, first/erste, task/aufgabe)
-- **💾 Bundle Optimization**: 5KB smaller package through legacy code elimination
-- **📊 Enhanced Testing**: 5/5 test suites pass (NEW: Snapshot functionality tests added)
+- **📊 Enhanced Debug Logging**: Real-time fallback attempt tracking with performance metrics
 
 
 ### 🔐 Persistent Browser Sessions
