@@ -59,6 +59,70 @@ interface SnapshotCacheEntry {
   hit_count: number;
 }
 
+interface TestScenarioEntry {
+  id?: number;
+  name: string;
+  description?: string;
+  steps_json: string;
+  pattern_hash: string;
+  url_pattern: string;
+  tags?: string;
+  profile?: string;
+  success_rate: number;
+  total_runs: number;
+  last_run?: number;
+  last_adapted?: number;
+  created_at: number;
+  confidence: number;
+}
+
+interface TestExecutionEntry {
+  id?: number;
+  scenario_id: number;
+  status: 'success' | 'failure' | 'partial' | 'adapted';
+  execution_time: number;
+  selector_adaptations?: string;
+  error_details?: string;
+  snapshot_id?: string;
+  confidence_score?: number;
+  profile?: string;
+  url: string;
+  timestamp: number;
+}
+
+interface TestPatternEntry {
+  id?: number;
+  interaction_type: string;
+  element_patterns: string;
+  success_indicators: string;
+  adaptation_rules: string;
+  pattern_hash: string;
+  confidence: number;
+  success_count: number;
+  total_count: number;
+  learned_from: 'direct' | 'inferred' | 'pattern';
+  created_at: number;
+  last_used: number;
+}
+
+interface TestStep {
+  action: 'navigate' | 'click' | 'type' | 'wait' | 'assert' | 'screenshot';
+  target?: string;
+  value?: string;
+  selector?: string;
+  timeout?: number;
+  description: string;
+}
+
+interface TestScenario {
+  name: string;
+  description?: string;
+  steps: TestStep[];
+  tags?: string[];
+  urlPattern: string;
+  profile?: string;
+}
+
 export class BidirectionalCache {
   private db: Database.Database;
   private normalizer: SmartNormalizer;
@@ -161,6 +225,72 @@ export class BidirectionalCache {
     this.db.exec(`CREATE INDEX IF NOT EXISTS idx_snapshot_url ON snapshot_cache(url);`);
     this.db.exec(`CREATE INDEX IF NOT EXISTS idx_snapshot_profile ON snapshot_cache(profile);`);
     this.db.exec(`CREATE INDEX IF NOT EXISTS idx_snapshot_created ON snapshot_cache(created_at);`);
+
+    // Test scenarios table for intelligent test persistence
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS test_scenarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        steps_json TEXT NOT NULL,
+        pattern_hash TEXT NOT NULL,
+        url_pattern TEXT NOT NULL,
+        tags TEXT,
+        profile TEXT,
+        success_rate REAL DEFAULT 1.0,
+        total_runs INTEGER DEFAULT 0,
+        last_run INTEGER,
+        last_adapted INTEGER,
+        created_at INTEGER NOT NULL,
+        confidence REAL DEFAULT 0.8
+      );
+    `);
+
+    // Test executions for learning and adaptation
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS test_executions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        scenario_id INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        execution_time INTEGER NOT NULL,
+        selector_adaptations TEXT,
+        error_details TEXT,
+        snapshot_id TEXT,
+        confidence_score REAL,
+        profile TEXT,
+        url TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        FOREIGN KEY (scenario_id) REFERENCES test_scenarios(id)
+      );
+    `);
+
+    // Test patterns for automatic recognition and matching
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS test_patterns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        interaction_type TEXT NOT NULL,
+        element_patterns TEXT NOT NULL,
+        success_indicators TEXT NOT NULL,
+        adaptation_rules TEXT NOT NULL,
+        pattern_hash TEXT NOT NULL UNIQUE,
+        confidence REAL DEFAULT 0.7,
+        success_count INTEGER DEFAULT 1,
+        total_count INTEGER DEFAULT 1,
+        learned_from TEXT DEFAULT 'direct',
+        created_at INTEGER NOT NULL,
+        last_used INTEGER NOT NULL
+      );
+    `);
+
+    // Create test-related indexes for performance
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_test_pattern_hash ON test_scenarios(pattern_hash);`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_test_url_pattern ON test_scenarios(url_pattern);`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_test_profile ON test_scenarios(profile);`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_test_tags ON test_scenarios(tags);`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_execution_scenario ON test_executions(scenario_id);`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_execution_status ON test_executions(status);`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_pattern_type ON test_patterns(interaction_type);`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_pattern_hash_unique ON test_patterns(pattern_hash);`);
 
     // Migration from old cache if exists
     try {
