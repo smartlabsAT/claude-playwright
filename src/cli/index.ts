@@ -539,6 +539,495 @@ Run ${chalk.white('npx claude-playwright cache help')} for detailed information.
     }
   });
 
+// ============= TEST MANAGEMENT COMMANDS =============
+
+program
+  .command('test <action>')
+  .description('Intelligent test scenario management')
+  .option('-n, --name <name>', 'Test scenario name')
+  .option('-d, --description <desc>', 'Test description')
+  .option('-t, --tags <tags>', 'Comma-separated tags')
+  .option('-u, --url <url>', 'Target URL for test')
+  .option('-p, --profile <profile>', 'Browser profile')
+  .option('-f, --file <file>', 'JSON file containing test steps')
+  .option('-q, --query <query>', 'Search query for finding tests')
+  .option('-l, --limit <limit>', 'Maximum number of results', '5')
+  .option('--save-adapted', 'Save adapted test as new scenario')
+  .option('--force', 'Force operation without confirmation')
+  .action(async (action: string, options) => {
+    try {
+      await handleTestCommand(action, options);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(chalk.red('❌ Test command failed:'), errorMessage);
+      process.exit(1);
+    }
+  });
+
+async function handleTestCommand(action: string, options: any): Promise<void> {
+  const { TestScenarioCache } = await import('../core/test-scenario-cache.js');
+  const { TestPatternMatcher } = await import('../core/test-pattern-matcher.js');
+  
+  const cache = new TestScenarioCache();
+  const matcher = new TestPatternMatcher(cache);
+
+  switch (action) {
+    case 'save':
+      await handleTestSave(cache, options);
+      break;
+      
+    case 'list':
+      await handleTestList(cache, options);
+      break;
+      
+    case 'find':
+      await handleTestFind(cache, options);
+      break;
+      
+    case 'run':
+      await handleTestRun(cache, options);
+      break;
+      
+    case 'adapt':
+      await handleTestAdapt(matcher, cache, options);
+      break;
+      
+    case 'stats':
+      await handleTestStats(cache);
+      break;
+      
+    case 'help':
+      showTestHelp();
+      break;
+      
+    default:
+      console.error(chalk.red(`❌ Unknown test action: ${action}`));
+      showTestHelp();
+      process.exit(1);
+  }
+}
+
+async function handleTestSave(cache: any, options: any): Promise<void> {
+  console.log();
+  console.log(chalk.blue.bold('💾 Save Test Scenario'));
+  console.log();
+
+  if (!options.name) {
+    console.error(chalk.red('❌ Test name is required. Use --name <name>'));
+    process.exit(1);
+  }
+
+  let steps = [];
+  
+  if (options.file) {
+    // Load steps from JSON file
+    const filePath = path.resolve(options.file);
+    if (!fs.existsSync(filePath)) {
+      console.error(chalk.red(`❌ File not found: ${filePath}`));
+      process.exit(1);
+    }
+    
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const data = JSON.parse(content);
+      steps = data.steps || data;
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to parse JSON file:'), error);
+      process.exit(1);
+    }
+  } else {
+    // Interactive step builder
+    console.log(chalk.yellow('🔧 Interactive test builder mode'));
+    console.log(chalk.gray('Enter test steps (type "done" when finished):'));
+    
+    const readline = require('readline');
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    steps = await new Promise<any[]>((resolve) => {
+      const testSteps: any[] = [];
+      
+      const askForStep = () => {
+        rl.question(chalk.cyan(`Step ${testSteps.length + 1} - Action (navigate/click/type/wait/assert/screenshot) or "done": `), (action: string) => {
+          if (action.toLowerCase() === 'done') {
+            rl.close();
+            resolve(testSteps);
+            return;
+          }
+          
+          if (!['navigate', 'click', 'type', 'wait', 'assert', 'screenshot'].includes(action)) {
+            console.log(chalk.red('❌ Invalid action. Use: navigate, click, type, wait, assert, screenshot'));
+            askForStep();
+            return;
+          }
+          
+          rl.question(chalk.cyan('Description: '), (description: string) => {
+            rl.question(chalk.cyan('Target/Selector (optional): '), (target: string) => {
+              rl.question(chalk.cyan('Value (optional): '), (value: string) => {
+                const step = {
+                  action,
+                  description,
+                  target: target || undefined,
+                  value: value || undefined,
+                  selector: target || undefined
+                };
+                
+                testSteps.push(step);
+                console.log(chalk.green('✓ Step added'));
+                askForStep();
+              });
+            });
+          });
+        });
+      };
+      
+      askForStep();
+    });
+  }
+
+  if (steps.length === 0) {
+    console.error(chalk.red('❌ No test steps provided'));
+    process.exit(1);
+  }
+
+  const scenario = {
+    name: options.name,
+    description: options.description,
+    steps,
+    tags: options.tags ? options.tags.split(',').map((t: string) => t.trim()) : undefined,
+    urlPattern: options.url || 'http://localhost:3000',
+    profile: options.profile
+  };
+
+  try {
+    const id = await cache.saveTestScenario(scenario);
+    
+    console.log();
+    console.log(chalk.green.bold('✅ Test scenario saved successfully!'));
+    console.log(chalk.gray(`ID: ${id}`));
+    console.log(chalk.gray(`Name: ${scenario.name}`));
+    console.log(chalk.gray(`Steps: ${steps.length}`));
+    console.log(chalk.gray(`URL Pattern: ${scenario.urlPattern}`));
+    console.log();
+  } catch (error) {
+    console.error(chalk.red('❌ Failed to save test scenario:'), error);
+    process.exit(1);
+  }
+}
+
+async function handleTestList(cache: any, options: any): Promise<void> {
+  console.log();
+  console.log(chalk.blue.bold('📚 Test Library'));
+  console.log();
+
+  try {
+    const filterOptions = {
+      profile: options.profile,
+      tag: options.tag,
+      urlPattern: options.url
+    };
+
+    const scenarios = await cache.listTestScenarios(filterOptions);
+    const stats = await cache.getTestLibraryStats();
+
+    console.log(chalk.cyan.bold('📊 Library Statistics:'));
+    console.log(`   Total Tests: ${chalk.white(stats.totalTests)}`);
+    console.log(`   Average Success Rate: ${chalk.white((stats.avgSuccessRate * 100).toFixed(1))}%`);
+    console.log(`   Total Executions: ${chalk.white(stats.totalExecutions)}`);
+    console.log();
+
+    if (scenarios.length === 0) {
+      console.log(chalk.yellow('🔍 No tests found matching the filters'));
+      return;
+    }
+
+    console.log(chalk.cyan.bold(`🎯 Available Tests (${scenarios.length} found):`));
+    console.log();
+
+    scenarios.forEach((scenario: any, i: number) => {
+      console.log(`${chalk.white.bold(`${i + 1}. ${scenario.name}`)}`);
+      console.log(`   ${chalk.gray('📝')} ${scenario.description || 'No description'}`);
+      console.log(`   ${chalk.gray('📍')} URL: ${scenario.urlPattern}`);
+      console.log(`   ${chalk.gray('📋')} Steps: ${scenario.steps.length} (${scenario.steps.map((s: any) => s.action).join(' → ')})`);
+      console.log(`   ${chalk.gray('🏷️')} Tags: ${scenario.tags ? scenario.tags.join(', ') : 'none'}`);
+      console.log(`   ${chalk.gray('👤')} Profile: ${scenario.profile || 'default'}`);
+      console.log();
+    });
+  } catch (error) {
+    console.error(chalk.red('❌ Failed to list tests:'), error);
+    process.exit(1);
+  }
+}
+
+async function handleTestFind(cache: any, options: any): Promise<void> {
+  console.log();
+  console.log(chalk.blue.bold('🔍 Find Similar Tests'));
+  console.log();
+
+  const query = options.query || options.name;
+  if (!query) {
+    console.error(chalk.red('❌ Search query required. Use --query <query>'));
+    process.exit(1);
+  }
+
+  try {
+    const limit = parseInt(options.limit) || 5;
+    const results = await cache.findSimilarTests(query, options.url, options.profile, limit);
+
+    if (results.length === 0) {
+      console.log(chalk.yellow(`🔍 No similar tests found for: "${query}"`));
+      return;
+    }
+
+    console.log(chalk.cyan.bold(`🎯 Found ${results.length} similar tests for: "${query}"`));
+    console.log();
+
+    results.forEach((result: any, i: number) => {
+      const scenario = result.scenario;
+      const similarity = (result.similarity * 100).toFixed(1);
+      const confidence = (result.confidence * 100).toFixed(1);
+
+      console.log(`${chalk.white.bold(`${i + 1}. ${scenario.name}`)} ${chalk.green(`(${similarity}% similarity)`)}`);
+      console.log(`   ${chalk.gray('📝')} ${scenario.description || 'No description'}`);
+      console.log(`   ${chalk.gray('🎯')} Confidence: ${confidence}%`);
+      console.log(`   ${chalk.gray('📍')} URL: ${scenario.urlPattern}`);
+      console.log(`   ${chalk.gray('📋')} Steps: ${scenario.steps.length}`);
+      console.log(`   ${chalk.gray('🏷️')} Tags: ${scenario.tags ? scenario.tags.join(', ') : 'none'}`);
+      console.log(`   ${chalk.gray('⚡')} Actions: ${scenario.steps.map((s: any) => s.action).join(' → ')}`);
+      
+      if (result.adaptationSuggestions && result.adaptationSuggestions.length > 0) {
+        console.log(`   ${chalk.gray('🔧')} Adaptations: ${result.adaptationSuggestions.join(', ')}`);
+      }
+      console.log();
+    });
+  } catch (error) {
+    console.error(chalk.red('❌ Failed to find tests:'), error);
+    process.exit(1);
+  }
+}
+
+async function handleTestRun(cache: any, options: any): Promise<void> {
+  console.log();
+  console.log(chalk.blue.bold('🏃 Run Test Scenario'));
+  console.log();
+
+  if (!options.name) {
+    console.error(chalk.red('❌ Test name required. Use --name <name>'));
+    process.exit(1);
+  }
+
+  try {
+    console.log(chalk.cyan(`🎯 Executing test: ${options.name}`));
+    
+    const adaptContext = {
+      url: options.url,
+      profile: options.profile
+    };
+
+    const result = await cache.executeTestScenario(options.name, adaptContext);
+    
+    console.log();
+    if (result.success) {
+      console.log(chalk.green.bold('✅ Test PASSED'));
+    } else {
+      console.log(chalk.red.bold('❌ Test FAILED'));
+    }
+    
+    console.log(chalk.gray(`⏱️ Execution Time: ${result.executionTime}ms`));
+    
+    if (result.adaptations.length > 0) {
+      console.log(chalk.yellow(`🔧 Adaptations Applied: ${result.adaptations.length}`));
+      result.adaptations.forEach((adaptation: string, i: number) => {
+        console.log(`   ${i + 1}. ${adaptation}`);
+      });
+    }
+    console.log();
+  } catch (error) {
+    console.error(chalk.red('❌ Test execution failed:'), error);
+    process.exit(1);
+  }
+}
+
+async function handleTestAdapt(matcher: any, cache: any, options: any): Promise<void> {
+  console.log();
+  console.log(chalk.blue.bold('🔄 Adapt Test Scenario'));
+  console.log();
+
+  if (!options.name) {
+    console.error(chalk.red('❌ Test name required. Use --name <name>'));
+    process.exit(1);
+  }
+
+  try {
+    // Get original scenario
+    const scenarios = await cache.listTestScenarios();
+    const originalScenario = scenarios.find((s: any) => s.name === options.name);
+    
+    if (!originalScenario) {
+      console.error(chalk.red(`❌ Test scenario '${options.name}' not found`));
+      process.exit(1);
+    }
+
+    const context = {
+      url: options.url || 'http://localhost:3000',
+      profile: options.profile || 'default'
+    };
+
+    console.log(chalk.cyan(`🎯 Adapting test: ${options.name}`));
+    console.log(chalk.gray(`📍 Target URL: ${context.url}`));
+    
+    const adaptation = await matcher.adaptTestScenario(originalScenario, context);
+    
+    console.log();
+    console.log(chalk.yellow.bold('🔄 Adaptation Results:'));
+    console.log();
+    console.log(chalk.gray(`📍 Original URL: ${originalScenario.urlPattern}`));
+    console.log(chalk.gray(`📍 Target URL: ${context.url}`));
+    console.log(chalk.gray(`🔧 Adaptations: ${adaptation.adaptations.length}`));
+    console.log();
+    
+    if (adaptation.adaptations.length > 0) {
+      console.log(chalk.cyan.bold('Adaptations Made:'));
+      adaptation.adaptations.forEach((adapt: string, i: number) => {
+        console.log(`${i + 1}. ${adapt}`);
+      });
+      console.log();
+    }
+
+    console.log(chalk.cyan.bold('Adapted Test Steps:'));
+    adaptation.adaptedScenario.steps.forEach((step: any, i: number) => {
+      console.log(`${i + 1}. ${chalk.white.bold(step.action.toUpperCase())}: ${step.description}`);
+      if (step.selector) console.log(`   🎯 Selector: ${step.selector}`);
+      if (step.target) console.log(`   🎯 Target: ${step.target}`);
+      if (step.value) console.log(`   💭 Value: ${step.value}`);
+    });
+
+    if (options.saveAdapted) {
+      const adaptedName = `${options.name} (Adapted)`;
+      const adaptedScenario = { ...adaptation.adaptedScenario, name: adaptedName };
+      await cache.saveTestScenario(adaptedScenario);
+      console.log();
+      console.log(chalk.green(`✅ Adapted test saved as '${adaptedName}'`));
+    }
+    console.log();
+  } catch (error) {
+    console.error(chalk.red('❌ Test adaptation failed:'), error);
+    process.exit(1);
+  }
+}
+
+async function handleTestStats(cache: any): Promise<void> {
+  console.log();
+  console.log(chalk.blue.bold('📊 Test Library Statistics'));
+  console.log();
+
+  try {
+    const stats = await cache.getTestLibraryStats();
+    const scenarios = await cache.listTestScenarios();
+    
+    console.log(chalk.cyan.bold('📈 Overall Statistics:'));
+    console.log(`   Total Tests: ${chalk.white.bold(stats.totalTests)}`);
+    console.log(`   Average Success Rate: ${chalk.white.bold((stats.avgSuccessRate * 100).toFixed(1))}%`);
+    console.log(`   Total Executions: ${chalk.white.bold(stats.totalExecutions)}`);
+    console.log();
+    
+    if (scenarios.length > 0) {
+      // Group by tags
+      const tagStats: Record<string, number> = {};
+      scenarios.forEach((scenario: any) => {
+        if (scenario.tags) {
+          scenario.tags.forEach((tag: string) => {
+            tagStats[tag] = (tagStats[tag] || 0) + 1;
+          });
+        }
+      });
+
+      if (Object.keys(tagStats).length > 0) {
+        console.log(chalk.cyan.bold('🏷️ Tests by Tags:'));
+        Object.entries(tagStats)
+          .sort(([,a], [,b]) => b - a)
+          .forEach(([tag, count]) => {
+            console.log(`   ${tag}: ${chalk.white.bold(count)}`);
+          });
+        console.log();
+      }
+
+      // Profile stats
+      const profileStats: Record<string, number> = {};
+      scenarios.forEach((scenario: any) => {
+        const profile = scenario.profile || 'default';
+        profileStats[profile] = (profileStats[profile] || 0) + 1;
+      });
+
+      console.log(chalk.cyan.bold('👤 Tests by Profile:'));
+      Object.entries(profileStats)
+        .sort(([,a], [,b]) => b - a)
+        .forEach(([profile, count]) => {
+          console.log(`   ${profile}: ${chalk.white.bold(count)}`);
+        });
+      console.log();
+    }
+  } catch (error) {
+    console.error(chalk.red('❌ Failed to get statistics:'), error);
+    process.exit(1);
+  }
+}
+
+function showTestHelp(): void {
+  console.log();
+  console.log(chalk.blue.bold('🧪 Test Management Help'));
+  console.log();
+  
+  console.log(chalk.cyan.bold('Available Commands:'));
+  console.log();
+  
+  console.log(`  ${chalk.green('save')} ${chalk.gray('--name <name> [options]')}`);
+  console.log(`    ${chalk.white('Save current interaction sequence as reusable test')}`);
+  console.log(`    ${chalk.gray('Options: --description, --tags, --url, --profile, --file')}`);
+  console.log();
+  
+  console.log(`  ${chalk.green('list')} ${chalk.gray('[filters]')}`);
+  console.log(`    ${chalk.white('Show all test scenarios with statistics')}`);
+  console.log(`    ${chalk.gray('Options: --profile, --tag, --url')}`);
+  console.log();
+  
+  console.log(`  ${chalk.green('find')} ${chalk.gray('--query <query> [options]')}`);
+  console.log(`    ${chalk.white('Find similar tests using AI-powered matching')}`);
+  console.log(`    ${chalk.gray('Options: --url, --profile, --limit')}`);
+  console.log();
+  
+  console.log(`  ${chalk.green('run')} ${chalk.gray('--name <name> [options]')}`);
+  console.log(`    ${chalk.white('Execute saved test with intelligent adaptation')}`);
+  console.log(`    ${chalk.gray('Options: --url, --profile')}`);
+  console.log();
+  
+  console.log(`  ${chalk.green('adapt')} ${chalk.gray('--name <name> [options]')}`);
+  console.log(`    ${chalk.white('Adapt existing test to new context')}`);
+  console.log(`    ${chalk.gray('Options: --url, --profile, --save-adapted')}`);
+  console.log();
+  
+  console.log(`  ${chalk.green('stats')}`);
+  console.log(`    ${chalk.white('Show comprehensive library statistics')}`);
+  console.log();
+  
+  console.log(chalk.yellow.bold('Examples:'));
+  console.log();
+  console.log(`  ${chalk.gray('# Save a login test interactively')}`);
+  console.log(`  claude-playwright test save --name "User Login" --tags "auth,login"`);
+  console.log();
+  console.log(`  ${chalk.gray('# Find tests related to todo management')}`);
+  console.log(`  claude-playwright test find --query "todo management"`);
+  console.log();
+  console.log(`  ${chalk.gray('# Run a test with adaptation')}`);
+  console.log(`  claude-playwright test run --name "User Login" --url "https://staging.app.com"`);
+  console.log();
+  console.log(`  ${chalk.gray('# Adapt test for different environment')}`);
+  console.log(`  claude-playwright test adapt --name "User Login" --url "https://prod.app.com" --save-adapted`);
+  console.log();
+}
+
 // Add MCP subcommand
 program.addCommand(createMcpCommand());
 
