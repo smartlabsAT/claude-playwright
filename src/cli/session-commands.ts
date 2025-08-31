@@ -120,7 +120,7 @@ export async function saveRealSession(
     }
     
     // Save using SessionManager
-    const manager = new SessionManager(process.cwd());
+    const manager = new SessionManager(); // Use project-local storage
     await manager.saveSession(sessionName, storageState, {
       browserProfile: options.browserProfile,
       metadata: {
@@ -164,7 +164,7 @@ export async function saveRealSession(
  * Auto-extend session if it expires in less than 2 hours
  */
 export async function autoExtendSessionIfNeeded(sessionName: string): Promise<boolean> {
-  const manager = new SessionManager(process.cwd());
+  const manager = new SessionManager(); // Use project-local storage
   return await manager.autoExtendSession(sessionName);
 }
 

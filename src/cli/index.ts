@@ -128,8 +128,7 @@ program
   .option('--url <url>', 'URL to navigate to for session capture')
   .option('--profile <profile>', 'Browser profile to use (desktop, mobile, tablet)')
   .action(async (action, name, options) => {
-    const projectDir = path.resolve(options.dir);
-    const sessionManager = new SessionManager(projectDir);
+    const sessionManager = new SessionManager(); // Use project-local storage
     
     try {
       switch (action) {

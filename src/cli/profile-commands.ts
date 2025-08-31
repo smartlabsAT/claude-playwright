@@ -29,7 +29,7 @@ export interface ViewportSize {
  */
 export async function createProfile(name: string, options: ProfileCreateOptions & {silent?: boolean}): Promise<boolean> {
   try {
-    const manager = new BrowserProfileManager(process.cwd());
+    const manager = new BrowserProfileManager(); // Use project-local storage
     
     // Parse viewport if provided
     const viewport = options.viewport ? 
@@ -82,7 +82,7 @@ export async function createProfile(name: string, options: ProfileCreateOptions 
  */
 export async function listProfiles(): Promise<void> {
   try {
-    const manager = new BrowserProfileManager(process.cwd());
+    const manager = new BrowserProfileManager(); // Use project-local storage
     const profiles = await manager.listProfiles();
     
     if (profiles.length === 0) {
@@ -132,7 +132,7 @@ export async function deleteProfile(name: string): Promise<boolean> {
       return false;
     }
     
-    const manager = new BrowserProfileManager(process.cwd());
+    const manager = new BrowserProfileManager(); // Use project-local storage
     const success = await manager.deleteProfile(name);
     
     if (success) {
@@ -154,7 +154,7 @@ export async function deleteProfile(name: string): Promise<boolean> {
  */
 export async function setupDefaultProfiles(force: boolean = false): Promise<void> {
   try {
-    const manager = new BrowserProfileManager(process.cwd());
+    const manager = new BrowserProfileManager(); // Use project-local storage
     
     console.log(chalk.blue('🔧 Setting up default browser profiles...'));
     
@@ -269,7 +269,7 @@ export async function showProfile(name: string): Promise<void> {
       return;
     }
     
-    const manager = new BrowserProfileManager(process.cwd());
+    const manager = new BrowserProfileManager(); // Use project-local storage
     const profiles = await manager.listProfiles();
     const profile = profiles.find(p => p.name === name);
     

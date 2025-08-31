@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import chalk from 'chalk';
-import * as os from 'os';
+import { ProjectPaths } from '../utils/project-paths.js';
 import * as inquirer from 'inquirer';
 
 export function createMcpCommand(): Command {
@@ -151,7 +151,7 @@ export function createMcpCommand(): Command {
       }
       
       // Check sessions directory
-      const sessionsDir = path.join(os.homedir(), '.claude-playwright', 'sessions');
+      const sessionsDir = ProjectPaths.getSessionsDir();
       if (fs.existsSync(sessionsDir)) {
         const sessions = fs.readdirSync(sessionsDir)
           .filter(f => f.endsWith('.session.json'))

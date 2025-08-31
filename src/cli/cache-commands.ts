@@ -2,7 +2,7 @@
 
 import chalk from 'chalk';
 import path from 'path';
-import os from 'os';
+import { ProjectPaths } from '../utils/project-paths.js';
 import fs from 'fs-extra';
 import { EnhancedCacheIntegration } from '../core/enhanced-cache-integration';
 
@@ -17,7 +17,7 @@ export async function showCacheInfo(): Promise<void> {
     const enhancedCache = EnhancedCacheIntegration.getInstance();
     
     // Get cache directory info
-    const cacheDir = path.join(os.homedir(), '.claude-playwright', 'cache');
+    const cacheDir = ProjectPaths.getCacheDir();
     console.log(chalk.cyan('📁 Cache Directory:'), chalk.white(cacheDir));
     
     if (fs.existsSync(cacheDir)) {
