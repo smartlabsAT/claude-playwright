@@ -5,7 +5,7 @@ import { chromium, Browser, BrowserContext, Page, ConsoleMessage, Request, Respo
 import { z } from "zod";
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import { ProjectPaths } from '../utils/project-paths.js';
 import { EnhancedCacheIntegration } from '../core/enhanced-cache-integration.js';
 
 // __dirname is available in CommonJS mode
@@ -90,7 +90,7 @@ const BASE_URL = process.env.BASE_URL || process.env.PLAYWRIGHT_BASE_URL || 'htt
 console.error(`[Claude-Playwright MCP] Starting with BASE_URL: ${BASE_URL}`);
 
 // Session management
-const SESSIONS_DIR = path.join(os.homedir(), '.claude-playwright', 'sessions');
+const SESSIONS_DIR = ProjectPaths.getSessionsDir();
 
 // Ensure sessions directory exists
 function ensureSessionsDir(): void {

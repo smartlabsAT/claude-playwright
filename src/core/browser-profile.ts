@@ -1,6 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import chalk from 'chalk';
+import { ProjectPaths } from '../utils/project-paths.js';
 
 export interface BrowserProfile {
   name: string;
@@ -60,13 +61,18 @@ export interface ProfileSummary {
  * Browser Profile Manager for managing multiple browser profiles with different user roles
  */
 export class BrowserProfileManager {
-  private profilesDir: string = './browser-profiles';
-  private authStatesDir: string = './playwright-auth';
+  private profilesDir: string;
+  private authStatesDir: string;
   
   constructor(workingDir?: string) {
     if (workingDir) {
+      // Legacy support for explicit working directory
       this.profilesDir = path.join(workingDir, 'browser-profiles');
       this.authStatesDir = path.join(workingDir, 'playwright-auth');
+    } else {
+      // Use project-local directories
+      this.profilesDir = ProjectPaths.getProfilesDir();
+      this.authStatesDir = path.join(ProjectPaths.getBaseDir(), 'auth-states');
     }
   }
   

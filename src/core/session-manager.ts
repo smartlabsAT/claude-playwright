@@ -1,6 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import chalk from 'chalk';
+import { ProjectPaths } from '../utils/project-paths.js';
 
 export interface SessionData {
   name: string;
@@ -24,14 +25,19 @@ export interface SessionListItem {
 }
 
 export class SessionManager {
-  private sessionsDir: string = './playwright-sessions';
-  private profilesDir: string = './browser-profiles';
+  private sessionsDir: string;
+  private profilesDir: string;
   private configPath: string;
   
   constructor(workingDir?: string) {
     if (workingDir) {
+      // Legacy support for explicit working directory
       this.sessionsDir = path.join(workingDir, 'playwright-sessions');
       this.profilesDir = path.join(workingDir, 'browser-profiles');
+    } else {
+      // Use project-local directories
+      this.sessionsDir = ProjectPaths.getSessionsDir();
+      this.profilesDir = ProjectPaths.getProfilesDir();
     }
     this.configPath = path.join(this.sessionsDir, '.config.json');
   }

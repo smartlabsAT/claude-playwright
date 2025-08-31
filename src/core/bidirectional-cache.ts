@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { SmartNormalizer, NormalizationResult } from './smart-normalizer.js';
 import crypto from 'crypto';
 import * as path from 'path';
-import * as os from 'os';
+import { ProjectPaths } from '../utils/project-paths.js';
 import * as fs from 'fs';
 
 interface SelectorCacheEntry {
@@ -84,7 +84,7 @@ export class BidirectionalCache {
     this.normalizer = new SmartNormalizer();
     
     // Create cache directory
-    this.cacheDir = path.join(os.homedir(), '.claude-playwright', 'cache');
+    this.cacheDir = ProjectPaths.getCacheDir();
     if (!fs.existsSync(this.cacheDir)) {
       fs.mkdirSync(this.cacheDir, { recursive: true });
     }

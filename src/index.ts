@@ -16,3 +16,4 @@ export * from './types/cli-types';
 // Utils
 export { SessionHelper } from './utils/session-helper';
 export { MCPIntegration } from './utils/mcp-integration';
+export { ProjectPaths } from './utils/project-paths';
