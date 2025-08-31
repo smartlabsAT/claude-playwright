@@ -432,7 +432,7 @@ Once saved, Claude can use sessions:
 
 Sessions are stored globally in:
 ```
-~/.claude-playwright/sessions/
+.claude-playwright/sessions/ (project-local)
 ```
 
 Each session includes:

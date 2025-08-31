@@ -243,7 +243,7 @@ npx claude-playwright cache debug
 ```
 🔍 Cache System Information
 
-📁 Cache Directory: ~/.claude-playwright/cache/
+📁 Cache Directory: .claude-playwright/cache/ (project-local)
 📊 SQLite Database: selector-cache.db (2.3 MB)
 🚀 Performance: 0.01ms average lookup time
 
@@ -268,7 +268,7 @@ npx claude-playwright cache debug
 
 ### **Database Location & Management**
 - **Database**: SQLite with WAL mode for concurrent access
-- **Location**: `~/.claude-playwright/cache/selector-cache.db`
+- **Location**: `.claude-playwright/cache/selector-cache.db` (project-local)
 - **Size Limit**: 50MB per profile (configurable)
 - **Cleanup**: Automatic TTL-based expiration and LRU eviction
 

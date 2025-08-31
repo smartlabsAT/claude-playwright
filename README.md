@@ -62,6 +62,15 @@ All these tools are available to Claude through MCP:
 - **Monitoring**: Console messages, network requests,
 - **Advanced**: Tab management, dialog handling, keyboard shortcuts
 
+### 📁 **Project-Local Storage**
+
+All data is stored **project-locally** in `.claude-playwright/` directory:
+
+- **🎯 Team Collaboration**: Each project has its own sessions/profiles
+- **🔒 Project Isolation**: No conflicts between different projects  
+- **📝 Version Control**: Profile configurations can be shared via Git
+- **🧹 Clean Separation**: No global user directory pollution
+
 ### 🚀 ** Bidirectional Cache System ** 
 
 ** BREAKTHROUGH:** Complete architecture migration to unified cache system with **enhanced performance** and **simplified architecture**.
@@ -249,7 +258,7 @@ npm test
 ### Sessions Not Working
 1. Check session validity: `npx claude-playwright session health`
 2. Extend expiring sessions: `npx claude-playwright session extend <name>`
-3. Sessions are stored globally in `~/.claude-playwright/sessions/`
+3. Sessions are stored project-locally in `.claude-playwright/sessions/`
 
 ### Need Help?
 - 📖 Check our [documentation](https://github.com/smartlabsAT/claude-playwright#readme)
