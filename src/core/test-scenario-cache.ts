@@ -345,8 +345,8 @@ export class TestScenarioCache extends BidirectionalCache {
 
     // Name similarity
     const nameSimilarity = this.normalizer.calculateJaccardSimilarity(
-      normalizedQuery.normalizedText,
-      this.normalizer.normalize(scenario.name).normalizedText
+      normalizedQuery.normalized,
+      this.normalizer.normalize(scenario.name).normalized
     );
     totalSimilarity += nameSimilarity * 0.4;
     factors += 0.4;
@@ -354,8 +354,8 @@ export class TestScenarioCache extends BidirectionalCache {
     // Description similarity
     if (scenario.description) {
       const descSimilarity = this.normalizer.calculateJaccardSimilarity(
-        normalizedQuery.normalizedText,
-        this.normalizer.normalize(scenario.description).normalizedText
+        normalizedQuery.normalized,
+        this.normalizer.normalize(scenario.description).normalized
       );
       totalSimilarity += descSimilarity * 0.3;
       factors += 0.3;
@@ -364,8 +364,8 @@ export class TestScenarioCache extends BidirectionalCache {
     // Steps similarity
     const stepsText = scenario.steps.map(s => s.description).join(' ');
     const stepsSimilarity = this.normalizer.calculateJaccardSimilarity(
-      normalizedQuery.normalizedText,
-      this.normalizer.normalize(stepsText).normalizedText
+      normalizedQuery.normalized,
+      this.normalizer.normalize(stepsText).normalized
     );
     totalSimilarity += stepsSimilarity * 0.2;
     factors += 0.2;
@@ -373,8 +373,8 @@ export class TestScenarioCache extends BidirectionalCache {
     // Tags similarity
     if (scenario.tags && scenario.tags.length > 0) {
       const tagsSimilarity = this.normalizer.calculateJaccardSimilarity(
-        normalizedQuery.normalizedText,
-        this.normalizer.normalize(scenario.tags.join(' ')).normalizedText
+        normalizedQuery.normalized,
+        this.normalizer.normalize(scenario.tags.join(' ')).normalized
       );
       totalSimilarity += tagsSimilarity * 0.1;
       factors += 0.1;
