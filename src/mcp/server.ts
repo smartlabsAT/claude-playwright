@@ -741,6 +741,116 @@ server.tool(
   }
 );
 
+// ============= TEST EXECUTION FUNCTIONS =============
+
+/**
+ * Execute a test scenario with real browser actions
+ */
+async function executeTestScenarioWithBrowser(
+  scenario: any, 
+  adaptContext?: {url?: string, profile?: string}
+): Promise<{success: boolean, adaptations: string[], executionTime: number}> {
+  const startTime = Date.now();
+  const adaptations: string[] = [];
+  let success = true;
+  
+  console.error(`[MCP Server] 🚀 Executing test scenario: ${scenario.name}`);
+  console.error(`[MCP Server] 📋 Steps: ${scenario.steps.length}`);
+  
+  try {
+    // Ensure browser is available
+    const page = await ensureBrowser();
+    
+    // Execute each step
+    for (let i = 0; i < scenario.steps.length; i++) {
+      const step = scenario.steps[i];
+      console.error(`[MCP Server] Step ${i + 1}/${scenario.steps.length}: ${step.action} - ${step.description}`);
+      
+      try {
+        await executeTestStep(page, step, adaptContext, adaptations);
+      } catch (error) {
+        console.error(`[MCP Server] ❌ Step ${i + 1} failed:`, error);
+        success = false;
+        break;
+      }
+    }
+    
+    const executionTime = Date.now() - startTime;
+    
+    // Record execution in cache
+    const cache = ensureTestCache();
+    const status: 'success' | 'failure' | 'partial' | 'adapted' = success ? 
+      (adaptations.length > 0 ? 'adapted' : 'success') : 'failure';
+    await cache.recordTestExecution(scenario.name, status, executionTime, adaptations, adaptContext);
+    await cache.updateTestSuccessRate(scenario.name, success);
+    
+    console.error(`[MCP Server] ${success ? '✅' : '❌'} Test completed in ${executionTime}ms`);
+    
+    return { success, adaptations, executionTime };
+    
+  } catch (error) {
+    const executionTime = Date.now() - startTime;
+    console.error(`[MCP Server] ❌ Test execution failed:`, error);
+    return { success: false, adaptations, executionTime };
+  }
+}
+
+/**
+ * Execute a single test step with real browser action
+ */
+async function executeTestStep(
+  page: any, 
+  step: any, 
+  adaptContext?: {url?: string, profile?: string}, 
+  adaptations?: string[]
+): Promise<void> {
+  const stepStartTime = Date.now();
+  
+  switch (step.action) {
+    case 'navigate':
+      let targetUrl = step.target;
+      
+      // Apply URL adaptation if provided
+      if (adaptContext?.url) {
+        const originalDomain = new URL(step.target).origin;
+        const newDomain = adaptContext.url.startsWith('http') ? 
+          new URL(adaptContext.url).origin : adaptContext.url;
+        targetUrl = step.target.replace(originalDomain, newDomain);
+        
+        if (targetUrl !== step.target) {
+          adaptations?.push(`URL adapted: ${step.target} → ${targetUrl}`);
+          console.error(`[MCP Server] 🔄 URL adapted: ${targetUrl}`);
+        }
+      }
+      
+      console.error(`[MCP Server] 🌐 Navigating to: ${targetUrl}`);
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
+      break;
+      
+    case 'click':
+      console.error(`[MCP Server] 👆 Clicking: ${step.target}`);
+      await page.click(step.target);
+      break;
+      
+    case 'type':
+      console.error(`[MCP Server] ⌨️ Typing "${step.value}" into: ${step.target}`);
+      await page.fill(step.target, step.value);
+      break;
+      
+    case 'screenshot':
+      console.error(`[MCP Server] 📸 Taking screenshot`);
+      await page.screenshot({ fullPage: false });
+      break;
+      
+    default:
+      console.error(`[MCP Server] ⚠️ Unknown action: ${step.action}`);
+      throw new Error(`Unknown test action: ${step.action}`);
+  }
+  
+  const stepTime = Date.now() - stepStartTime;
+  console.error(`[MCP Server] ✅ Step "${step.action}" completed in ${stepTime}ms`);
+}
+
 // ============= CORE NAVIGATION TOOLS =============
 
 // Core tool: browser_navigate with BASE_URL support
@@ -1309,7 +1419,14 @@ server.tool(
       const cache = ensureTestCache();
       const matcher = ensurePatternMatcher();
       
-      const result = await cache.executeTestScenario(testName, adaptContext);
+      // Get test scenario from cache
+      const scenario = await cache.getTestScenarioByName(testName);
+      if (!scenario) {
+        throw new Error(`Test scenario '${testName}' not found`);
+      }
+      
+      // Execute with real browser integration
+      const result = await executeTestScenarioWithBrowser(scenario, adaptContext);
       
       const statusIcon = result.success ? '✅' : '❌';
       const statusText = result.success ? 'SUCCESS' : 'FAILED';
@@ -1578,6 +1695,116 @@ server.tool(
         content: [{
           type: "text", 
           text: `❌ Test adaptation failed: ${errorMessage}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Tool: browser_delete_test
+server.tool(
+  "browser_delete_test",
+  "Delete test scenarios with flexible options",
+  {
+    testName: z.string().optional().describe("Name of the test scenario to delete"),
+    deleteAll: z.boolean().optional().default(false).describe("Delete all test scenarios"),
+    tag: z.string().optional().describe("Delete all tests with this tag"),
+    confirmDelete: z.boolean().optional().default(false).describe("Skip confirmation prompt (use with caution)")
+  },
+  async ({ testName, deleteAll = false, tag, confirmDelete = false }) => {
+    try {
+      const cache = ensureTestCache();
+      
+      // Delete specific test by name
+      if (testName) {
+        const deleted = await cache.deleteTestScenario(testName);
+        
+        if (deleted) {
+          return {
+            content: [{
+              type: "text",
+              text: `✅ Test scenario '${testName}' deleted successfully`
+            }]
+          };
+        } else {
+          return {
+            content: [{
+              type: "text",
+              text: `❌ Test scenario '${testName}' not found`
+            }],
+            isError: true
+          };
+        }
+      }
+      
+      // Delete all tests
+      if (deleteAll) {
+        if (!confirmDelete) {
+          return {
+            content: [{
+              type: "text",
+              text: `⚠️ WARNING: This will delete ALL test scenarios and their execution history.\nTo confirm, call this tool again with confirmDelete: true\n\nThis action cannot be undone!`
+            }]
+          };
+        }
+        
+        const result = await cache.deleteAllTestScenarios();
+        
+        if (result.deleted > 0) {
+          return {
+            content: [{
+              type: "text",
+              text: `✅ Deleted ${result.deleted} test scenarios and ${result.executionsDeleted} executions`
+            }]
+          };
+        } else {
+          return {
+            content: [{
+              type: "text",
+              text: `ℹ️ No test scenarios found to delete`
+            }]
+          };
+        }
+      }
+      
+      // Delete by tag
+      if (tag) {
+        const result = await cache.deleteTestScenariosByTag(tag);
+        
+        if (result.deleted > 0) {
+          return {
+            content: [{
+              type: "text", 
+              text: `✅ Deleted ${result.deleted} test scenarios with tag '${tag}' and ${result.executionsDeleted} executions`
+            }]
+          };
+        } else {
+          return {
+            content: [{
+              type: "text",
+              text: `❌ No test scenarios found with tag '${tag}'`
+            }],
+            isError: true
+          };
+        }
+      }
+      
+      // No valid options provided
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Please specify what to delete:\n• testName: Delete specific test\n• deleteAll: Delete all tests (requires confirmDelete: true)\n• tag: Delete tests with specific tag`
+        }],
+        isError: true
+      };
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Failed to delete test scenarios: ${errorMessage}`
         }],
         isError: true
       };
