@@ -554,6 +554,8 @@ program
   .option('-l, --limit <limit>', 'Maximum number of results', '5')
   .option('--save-adapted', 'Save adapted test as new scenario')
   .option('--force', 'Force operation without confirmation')
+  .option('--all', 'Delete all test scenarios')
+  .option('--tag <tag>', 'Target tag for operations')
   .action(async (action: string, options) => {
     try {
       await handleTestCommand(action, options);
@@ -594,6 +596,10 @@ async function handleTestCommand(action: string, options: any): Promise<void> {
       
     case 'stats':
       await handleTestStats(cache);
+      break;
+      
+    case 'delete':
+      await handleTestDelete(cache, options);
       break;
       
     case 'help':
@@ -975,6 +981,89 @@ async function handleTestStats(cache: any): Promise<void> {
   }
 }
 
+async function handleTestDelete(cache: any, options: any): Promise<void> {
+  console.log();
+  console.log(chalk.red.bold('🗑️ Delete Test Scenarios'));
+  console.log();
+
+  try {
+    // Delete specific test by name
+    if (options.name) {
+      console.log(`Deleting test scenario: ${chalk.cyan(options.name)}`);
+      
+      const deleted = await cache.deleteTestScenario(options.name);
+      
+      if (deleted) {
+        console.log(`✅ Test scenario '${chalk.green(options.name)}' deleted successfully`);
+      } else {
+        console.log(`❌ Test scenario '${chalk.red(options.name)}' not found`);
+        process.exit(1);
+      }
+      return;
+    }
+
+    // Delete all tests
+    if (options.all) {
+      if (!options.force) {
+        // Get confirmation
+        const readline = await import('readline');
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+
+        const answer = await new Promise<string>((resolve) => {
+          rl.question(chalk.yellow('⚠️ Are you sure you want to delete ALL test scenarios? This cannot be undone. [y/N]: '), (answer) => {
+            rl.close();
+            resolve(answer.toLowerCase());
+          });
+        });
+
+        if (answer !== 'y' && answer !== 'yes') {
+          console.log(chalk.gray('❌ Operation cancelled'));
+          return;
+        }
+      }
+
+      const result = await cache.deleteAllTestScenarios();
+      
+      if (result.deleted > 0) {
+        console.log(`✅ Deleted ${chalk.green(result.deleted)} test scenarios and ${chalk.green(result.executionsDeleted)} executions`);
+      } else {
+        console.log(chalk.gray('ℹ️ No test scenarios found to delete'));
+      }
+      return;
+    }
+
+    // Delete by tag
+    if (options.tag) {
+      console.log(`Deleting test scenarios with tag: ${chalk.cyan(options.tag)}`);
+      
+      const result = await cache.deleteTestScenariosByTag(options.tag);
+      
+      if (result.deleted > 0) {
+        console.log(`✅ Deleted ${chalk.green(result.deleted)} test scenarios with tag '${options.tag}' and ${chalk.green(result.executionsDeleted)} executions`);
+      } else {
+        console.log(`❌ No test scenarios found with tag '${chalk.red(options.tag)}'`);
+      }
+      return;
+    }
+
+    // No valid options provided
+    console.log(chalk.red('❌ Please specify what to delete:'));
+    console.log(`  ${chalk.gray('--name <name>')}`);
+    console.log(`  ${chalk.gray('--all [--force]')}`);
+    console.log(`  ${chalk.gray('--tag <tag>')}`);
+    console.log();
+    console.log(`Run ${chalk.cyan('claude-playwright test help')} for more information.`);
+    process.exit(1);
+
+  } catch (error) {
+    console.error(chalk.red('❌ Failed to delete test scenarios:'), error);
+    process.exit(1);
+  }
+}
+
 function showTestHelp(): void {
   console.log();
   console.log(chalk.blue.bold('🧪 Test Management Help'));
@@ -1012,6 +1101,19 @@ function showTestHelp(): void {
   console.log(`    ${chalk.white('Show comprehensive library statistics')}`);
   console.log();
   
+  console.log(`  ${chalk.green('delete')} ${chalk.gray('--name <name>')}`);
+  console.log(`    ${chalk.white('Delete a specific test scenario')}`);
+  console.log();
+  
+  console.log(`  ${chalk.green('delete')} ${chalk.gray('--all [--force]')}`);
+  console.log(`    ${chalk.white('Delete all test scenarios')}`);
+  console.log(`    ${chalk.gray('Use --force to skip confirmation')}`);
+  console.log();
+  
+  console.log(`  ${chalk.green('delete')} ${chalk.gray('--tag <tag>')}`);
+  console.log(`    ${chalk.white('Delete all tests with specific tag')}`);
+  console.log();
+  
   console.log(chalk.yellow.bold('Examples:'));
   console.log();
   console.log(`  ${chalk.gray('# Save a login test interactively')}`);
@@ -1025,6 +1127,15 @@ function showTestHelp(): void {
   console.log();
   console.log(`  ${chalk.gray('# Adapt test for different environment')}`);
   console.log(`  claude-playwright test adapt --name "User Login" --url "https://prod.app.com" --save-adapted`);
+  console.log();
+  console.log(`  ${chalk.gray('# Delete a specific test')}`);
+  console.log(`  claude-playwright test delete --name "User Login"`);
+  console.log();
+  console.log(`  ${chalk.gray('# Delete all tests with confirmation')}`);
+  console.log(`  claude-playwright test delete --all`);
+  console.log();
+  console.log(`  ${chalk.gray('# Delete all auth-related tests')}`);
+  console.log(`  claude-playwright test delete --tag "auth"`);
   console.log();
 }
 
