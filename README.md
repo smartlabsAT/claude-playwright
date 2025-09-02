@@ -133,6 +133,15 @@ Simply ask Claude to manage your tests - no CLI needed!
 
 "What tests do I have for todo management?"
 // → Intelligent semantic search across your test library
+
+"Delete the test named 'My Test'"
+// → Uses browser_delete_test for single test deletion
+
+"Delete all tests tagged as 'auth'"
+// → Uses browser_delete_test with tag-based filtering
+
+"Delete all test scenarios"
+// → Uses browser_delete_test with confirmation prompt
 ```
 
 #### 🛠 **MCP Tools** (Available in Claude Code):
@@ -144,6 +153,7 @@ browser_run_test           # Execute tests with intelligent adaptation
 browser_test_library       # Browse complete test library with stats
 browser_suggest_actions    # Get smart suggestions based on learned patterns
 browser_adapt_test         # Adapt existing tests to new contexts
+browser_delete_test        # Delete test scenarios with flexible options
 ```
 
 #### 📱 **CLI Commands:**
@@ -162,6 +172,18 @@ claude-playwright test list --tag "authentication"
 
 # Analytics and insights
 claude-playwright test stats
+
+# Delete specific test
+claude-playwright test delete --name "My Test"
+
+# Delete all tests with confirmation
+claude-playwright test delete --all
+
+# Force delete all (without confirmation)
+claude-playwright test delete --all --force
+
+# Delete all tests with specific tag
+claude-playwright test delete --tag "outdated"
 ```
 
 #### 🎯 **Usage Example:**
@@ -463,6 +485,7 @@ npm test
 
 - **[MCP Server Documentation](docs/MCP_SERVER.md)** - Detailed MCP integration guide  
 - **[Advanced Caching System](docs/CACHING.md)** - Complete documentation for AI-aware bidirectional caching with universal selector fallbacks
+- **[Intelligent Test Management](docs/INTELLIGENT_TESTING.md)** - Revolutionary AI-powered test persistence and automation system
 - **[API Reference](docs/API.md)** - Complete API documentation
 - **[Examples](examples/)** - More usage examples
 
