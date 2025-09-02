@@ -98,6 +98,29 @@ Provides intelligent action suggestions based on learned patterns.
 #### `browser_adapt_test`
 Adapts existing tests for new contexts.
 
+#### `browser_delete_test` (NEW - 2025-09-01)
+Delete test scenarios with flexible options.
+
+**Parameters:**
+- `testName` (string, optional): Name of specific test to delete
+- `deleteAll` (boolean, optional): Delete all tests (default: false)
+- `tag` (string, optional): Delete all tests with specific tag
+- `confirmDelete` (boolean, optional): Skip confirmation prompts (default: false)
+
+**Examples in Claude Code:**
+```javascript
+"Delete the test named 'User Login'"
+"Delete all test scenarios"
+"Delete all tests tagged as 'auth'"
+```
+
+**Features:**
+- **Single Test Deletion**: Delete specific tests by name
+- **Bulk Operations**: Delete all tests or filter by tags
+- **Safety Confirmations**: Prompts for destructive operations
+- **Force Delete**: Skip confirmations for automation
+- **Cascade Deletion**: Properly handles related execution history
+
 ## 📱 **CLI Commands**
 
 ### 💾 **Test Storage**
@@ -162,6 +185,26 @@ claude-playwright test adapt \
 
 # Preview adaptations
 claude-playwright test adapt --name "E2E Test" --url "https://staging.com"
+```
+
+### 🗑️ **Test Deletion & Cleanup**
+
+```bash
+# Delete specific test
+claude-playwright test delete --name "My Test"
+
+# Delete all tests with confirmation
+claude-playwright test delete --all
+
+# Force delete all (without confirmation)
+claude-playwright test delete --all --force
+
+# Delete all tests with specific tag
+claude-playwright test delete --tag "outdated"
+
+# Example workflow for cleanup
+claude-playwright test list --tag "temporary" | \
+  xargs -I {} claude-playwright test delete --name {} --force
 ```
 
 ### 📊 **Statistics & Analytics**
