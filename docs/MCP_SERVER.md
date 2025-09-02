@@ -303,9 +303,10 @@ Get cache statistics and debug information.
 
 **Sample Output:**
 ```
-=== Cache Status ===
+=== Unified Cache Status ===
 Current URL: http://localhost:3002/todos
 Navigation Count: 3
+Architecture: Single unified system (5/5 test suites passed)
 
 === Cache Metrics ===
 selector:
@@ -431,7 +432,7 @@ Once saved, Claude can use sessions:
 
 Sessions are stored globally in:
 ```
-~/.claude-playwright/sessions/
+.claude-playwright/sessions/ (project-local)
 ```
 
 Each session includes:

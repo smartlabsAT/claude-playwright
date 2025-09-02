@@ -43,6 +43,8 @@ After restarting Claude, you can immediately start automating:
 "Take a screenshot of the dashboard" 
 "Click the submit button and wait for the success message"
 "Extract all product prices from the page"
+"Delete the first todo item" # Works perfectly with unified cache!
+"Löschen Sie das erste Element" # Multilingual support included!
 ```
 
 Claude will use the browser automation tools to complete these tasks!
@@ -57,14 +59,24 @@ All these tools are available to Claude through MCP:
 - **Forms**: Fill forms, select options, upload files
 - **Screenshots**: Full page, element-specific, or viewport captures
 - **Data Extraction**: Run JavaScript, get accessibility snapshots
-- **Monitoring**: Console messages, network requests, cache statistics
+- **Monitoring**: Console messages, network requests,
 - **Advanced**: Tab management, dialog handling, keyboard shortcuts
 
-### 🚀 ** Bidirectional Cache System** 
+### 📁 **Project-Local Storage**
 
-**BREAKTHROUGH:** AI-aware intelligent caching with **universal selector fallbacks** achieving.
+All data is stored **project-locally** in `.claude-playwright/` directory:
 
-#### 🎯 **Production-Ready Features (Latest Enhancements):**
+- **🎯 Team Collaboration**: Each project has its own sessions/profiles
+- **🔒 Project Isolation**: No conflicts between different projects  
+- **📝 Version Control**: Profile configurations can be shared via Git
+- **🧹 Clean Separation**: No global user directory pollution
+
+### 🚀 ** Bidirectional Cache System ** 
+
+** BREAKTHROUGH:** Complete architecture migration to unified cache system with **enhanced performance** and **simplified architecture**.
+
+#### 🎯 **Unified System Features:**
+- **🏗️ UNIFIED ARCHITECTURE**: Single cache system for selectors + snapshots + all metadata (1560+ legacy lines eliminated)
 - **🧠 AI-Aware Input Recognition**: Understands "click" = "press" = "tap" = "select" = "delete" = "löschen"  
 - **🔄 Bidirectional Lookup**: Input → Selector and Selector → Inputs mapping with cross-session learning
 - **🛠️ Early Syntax Fixing**: `button:text("Delete")` → `button:has-text("Delete")` automatically 
@@ -246,7 +258,7 @@ npm test
 ### Sessions Not Working
 1. Check session validity: `npx claude-playwright session health`
 2. Extend expiring sessions: `npx claude-playwright session extend <name>`
-3. Sessions are stored globally in `~/.claude-playwright/sessions/`
+3. Sessions are stored project-locally in `.claude-playwright/sessions/`
 
 ### Need Help?
 - 📖 Check our [documentation](https://github.com/smartlabsAT/claude-playwright#readme)

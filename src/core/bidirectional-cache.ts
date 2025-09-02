@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { SmartNormalizer, NormalizationResult } from './smart-normalizer.js';
 import crypto from 'crypto';
 import * as path from 'path';
-import * as os from 'os';
+import { ProjectPaths } from '../utils/project-paths.js';
 import * as fs from 'fs';
 
 interface SelectorCacheEntry {
@@ -32,6 +32,7 @@ interface InputMappingEntry {
 interface CacheOptions {
   maxSizeMB?: number;
   selectorTTL?: number;
+  snapshotTTL?: number;
   cleanupInterval?: number;
   maxVariationsPerSelector?: number;
 }
@@ -41,6 +42,21 @@ interface LookupResult {
   confidence: number;
   source: 'exact' | 'normalized' | 'reverse' | 'fuzzy';
   cached: boolean;
+}
+
+interface SnapshotCacheEntry {
+  id?: number;
+  cache_key: string;
+  url: string;
+  dom_hash: string;
+  snapshot_data: string;
+  viewport_width?: number;
+  viewport_height?: number;
+  profile?: string;
+  created_at: number;
+  last_used: number;
+  ttl: number;
+  hit_count: number;
 }
 
 export class BidirectionalCache {
@@ -60,6 +76,7 @@ export class BidirectionalCache {
     this.options = {
       maxSizeMB: options.maxSizeMB ?? 50,
       selectorTTL: options.selectorTTL ?? 300000, // 5 minutes
+      snapshotTTL: options.snapshotTTL ?? 1800000, // 30 minutes
       cleanupInterval: options.cleanupInterval ?? 60000, // 1 minute
       maxVariationsPerSelector: options.maxVariationsPerSelector ?? 20
     };
@@ -67,7 +84,7 @@ export class BidirectionalCache {
     this.normalizer = new SmartNormalizer();
     
     // Create cache directory
-    this.cacheDir = path.join(os.homedir(), '.claude-playwright', 'cache');
+    this.cacheDir = ProjectPaths.getCacheDir();
     if (!fs.existsSync(this.cacheDir)) {
       fs.mkdirSync(this.cacheDir, { recursive: true });
     }
@@ -122,6 +139,29 @@ export class BidirectionalCache {
     this.db.exec(`CREATE INDEX IF NOT EXISTS idx_url_selector ON input_mappings(url, selector_hash);`);
     this.db.exec(`CREATE INDEX IF NOT EXISTS idx_tokens ON input_mappings(input_tokens);`);
 
+    // Create snapshot cache table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS snapshot_cache (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cache_key TEXT NOT NULL UNIQUE,
+        url TEXT NOT NULL,
+        dom_hash TEXT NOT NULL,
+        snapshot_data TEXT NOT NULL,
+        viewport_width INTEGER,
+        viewport_height INTEGER,
+        profile TEXT,
+        created_at INTEGER NOT NULL,
+        last_used INTEGER NOT NULL,
+        ttl INTEGER NOT NULL,
+        hit_count INTEGER DEFAULT 0
+      );
+    `);
+
+    // Create snapshot indexes
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_snapshot_url ON snapshot_cache(url);`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_snapshot_profile ON snapshot_cache(profile);`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_snapshot_created ON snapshot_cache(created_at);`);
+
     // Migration from old cache if exists
     try {
       const tableExists = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='cache'").get();
@@ -136,6 +176,21 @@ export class BidirectionalCache {
                  accessed_at as last_used
           FROM cache 
           WHERE cache_type = 'selector';
+        `);
+
+        // Migrate snapshot data
+        this.db.exec(`
+          INSERT OR IGNORE INTO snapshot_cache (cache_key, url, dom_hash, snapshot_data, created_at, last_used, ttl, profile)
+          SELECT cache_key,
+                 url,
+                 'migrated' as dom_hash,
+                 data as snapshot_data,
+                 created_at,
+                 accessed_at as last_used,
+                 ttl,
+                 profile
+          FROM cache
+          WHERE cache_type = 'snapshot';
         `);
         console.error('[BidirectionalCache] Migrated data from old cache table');
       }
@@ -554,6 +609,13 @@ export class BidirectionalCache {
       `);
       expiredStmt.run(this.options.selectorTTL, now);
 
+      // Remove expired snapshots
+      const expiredSnapshotsStmt = this.db.prepare(`
+        DELETE FROM snapshot_cache 
+        WHERE (created_at + ttl) < ?
+      `);
+      expiredSnapshotsStmt.run(now);
+
       // Limit variations per selector
       const limitStmt = this.db.prepare(`
         DELETE FROM input_mappings
@@ -599,6 +661,8 @@ export class BidirectionalCache {
       const hitRate = Object.values(this.stats.hits).reduce((a, b) => a + b, 0) / 
                      (Object.values(this.stats.hits).reduce((a, b) => a + b, 0) + this.stats.misses);
 
+      const snapshotStats = await this.getSnapshotMetrics();
+
       return {
         performance: {
           hitRate: hitRate || 0,
@@ -607,6 +671,7 @@ export class BidirectionalCache {
           totalLookups: Object.values(this.stats.hits).reduce((a, b) => a + b, 0) + this.stats.misses
         },
         storage: dbStats,
+        snapshots: snapshotStats,
         operations: {
           sets: this.stats.sets,
           learnings: this.stats.learnings
@@ -622,6 +687,7 @@ export class BidirectionalCache {
     try {
       this.db.exec('DELETE FROM input_mappings');
       this.db.exec('DELETE FROM selector_cache_v2');
+      this.db.exec('DELETE FROM snapshot_cache');
       
       // Reset stats
       this.stats = {
@@ -674,6 +740,130 @@ export class BidirectionalCache {
     } catch (error) {
       console.error('[BidirectionalCache] Invalidate selector error:', error);
     }
+  }
+
+  // Snapshot cache methods
+  async getSnapshot(key: object, profile?: string): Promise<any | null> {
+    try {
+      const cacheKey = this.createCacheKey(key);
+      const now = Date.now();
+      
+      const stmt = this.db.prepare(`
+        SELECT snapshot_data, hit_count, created_at, ttl
+        FROM snapshot_cache
+        WHERE cache_key = ? AND (profile = ? OR (profile IS NULL AND ? IS NULL))
+        AND (created_at + ttl) > ?
+      `);
+      
+      const result = stmt.get(cacheKey, profile || null, profile || null, now) as {
+        snapshot_data: string;
+        hit_count: number;
+        created_at: number;
+        ttl: number;
+      } | undefined;
+      
+      if (result) {
+        // Update hit count and last used
+        const updateStmt = this.db.prepare(`
+          UPDATE snapshot_cache 
+          SET last_used = ?, hit_count = hit_count + 1
+          WHERE cache_key = ? AND (profile = ? OR (profile IS NULL AND ? IS NULL))
+        `);
+        updateStmt.run(now, cacheKey, profile || null, profile || null);
+        
+        return JSON.parse(result.snapshot_data);
+      }
+    } catch (error) {
+      console.error('[BidirectionalCache] Get snapshot error:', error);
+    }
+    return null;
+  }
+
+  async setSnapshot(key: object, value: any, options: { url?: string; profile?: string; ttl?: number } = {}): Promise<void> {
+    try {
+      const cacheKey = this.createCacheKey(key);
+      const now = Date.now();
+      const ttl = options.ttl ?? this.options.snapshotTTL;
+      
+      const stmt = this.db.prepare(`
+        INSERT OR REPLACE INTO snapshot_cache
+        (cache_key, url, dom_hash, snapshot_data, profile, created_at, last_used, ttl, hit_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+      `);
+      
+      // Extract DOM hash from key if available
+      const domHash = typeof key === 'object' && 'domHash' in key ? 
+        (key as any).domHash : 'unknown';
+      
+      stmt.run(
+        cacheKey,
+        options.url || '',
+        domHash,
+        JSON.stringify(value),
+        options.profile || null,
+        now,
+        now,
+        ttl
+      );
+      
+    } catch (error) {
+      console.error('[BidirectionalCache] Set snapshot error:', error);
+    }
+  }
+
+  async invalidateSnapshots(options: { url?: string; profile?: string } = {}): Promise<void> {
+    try {
+      let stmt;
+      let params: any[] = [];
+      
+      if (options.url && options.profile) {
+        stmt = this.db.prepare(`
+          DELETE FROM snapshot_cache 
+          WHERE url = ? AND (profile = ? OR profile IS NULL)
+        `);
+        params = [options.url, options.profile];
+      } else if (options.url) {
+        stmt = this.db.prepare(`DELETE FROM snapshot_cache WHERE url = ?`);
+        params = [options.url];
+      } else if (options.profile) {
+        stmt = this.db.prepare(`DELETE FROM snapshot_cache WHERE profile = ?`);
+        params = [options.profile];
+      } else {
+        stmt = this.db.prepare(`DELETE FROM snapshot_cache`);
+      }
+      
+      const result = stmt.run(...params);
+      console.error(`[BidirectionalCache] Invalidated ${result.changes} snapshots`);
+      
+    } catch (error) {
+      console.error('[BidirectionalCache] Invalidate snapshots error:', error);
+    }
+  }
+
+  async getSnapshotMetrics(): Promise<any> {
+    try {
+      const stats = this.db.prepare(`
+        SELECT 
+          COUNT(*) as total_snapshots,
+          SUM(hit_count) as total_hits,
+          AVG(hit_count) as avg_hits_per_snapshot,
+          COUNT(DISTINCT url) as unique_urls,
+          COUNT(DISTINCT profile) as unique_profiles,
+          MIN(created_at) as oldest_snapshot,
+          MAX(last_used) as most_recent_access
+        FROM snapshot_cache
+      `).get();
+      
+      return stats || {};
+    } catch (error) {
+      console.error('[BidirectionalCache] Get snapshot metrics error:', error);
+      return {};
+    }
+  }
+
+  private createCacheKey(key: any): string {
+    const keyString = typeof key === 'object' ? JSON.stringify(key) : String(key);
+    return crypto.createHash('md5').update(keyString).digest('hex');
   }
 
   close(): void {

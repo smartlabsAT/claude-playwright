@@ -243,7 +243,7 @@ npx claude-playwright cache debug
 ```
 🔍 Cache System Information
 
-📁 Cache Directory: ~/.claude-playwright/cache/
+📁 Cache Directory: .claude-playwright/cache/ (project-local)
 📊 SQLite Database: selector-cache.db (2.3 MB)
 🚀 Performance: 0.01ms average lookup time
 
@@ -254,9 +254,10 @@ npx claude-playwright cache debug
 ⚡ Hit Rate: 87.3% (last 1000 operations)
 🧠 Learning: 23 auto-discovered patterns
 
-=== Legacy Cache (v1 - Snapshots) ===
+=== Unified Snapshot System (v2 - Integrated) ===
 📷 Snapshots: 12 entries (18.7 MB, 30min TTL)
 🔄 Hit Rate: 73.2%
+🆕 NEW: Profile isolation, DOM hash validation, unified metrics
 
 💡 Recommendations:
   ✅ Cache system healthy - excellent performance
@@ -267,7 +268,7 @@ npx claude-playwright cache debug
 
 ### **Database Location & Management**
 - **Database**: SQLite with WAL mode for concurrent access
-- **Location**: `~/.claude-playwright/cache/selector-cache.db`
+- **Location**: `.claude-playwright/cache/selector-cache.db` (project-local)
 - **Size Limit**: 50MB per profile (configurable)
 - **Cleanup**: Automatic TTL-based expiration and LRU eviction
 
@@ -416,10 +417,3 @@ Through three comprehensive Claude Code test sessions, we demonstrated:
 3. **Session 3**: 64ms cache hit → 52% performance improvement
 
 **This system sets a new standard for intelligent caching in AI-driven browser automation**, providing bulletproof reliability, universal compatibility, and intelligent adaptation to any web application architecture.
-
----
-
-**Last Updated:** 2025-08-29 (Final Optimization)  
-**Implementation Status:** ✅ Production-ready with 100% test coverage  
-**Performance:** ⚡ 0.01ms average lookup time achieved  
-**Reliability:** 🛡️ Zero test failures, robust error handling

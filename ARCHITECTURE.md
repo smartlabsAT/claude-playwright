@@ -222,7 +222,7 @@ interface ProfileConfig {
 1. CLI: session save → Launch Browser
 2. User: Manual Login
 3. Capture: Cookies + Storage
-4. Encrypt & Store: ~/.claude-playwright/sessions/
+4. Encrypt & Store: .claude-playwright/sessions/ (project-local)
 5. Load: Restore to Browser Context
 ```
 
@@ -284,7 +284,7 @@ export { MCPIntegration }
 
 ## Security Considerations
 
-1. **Session Storage**: Stored in user home directory
+1. **Session Storage**: Stored project-locally in `.claude-playwright/`
 2. **No Encryption**: Sessions stored as plain JSON (future: encryption)
 3. **8-Hour Expiry**: Automatic session invalidation
 4. **Local Only**: No network transmission of sessions

@@ -24,6 +24,9 @@ auth-states/
 browser-profiles/*/
 !browser-profiles/*.json
 
+# Project-local Claude Playwright data
+.claude-playwright/
+
 # Environment variables
 .env
 .env.local
