@@ -9,6 +9,7 @@ import { ProjectPaths } from '../utils/project-paths.js';
 import { EnhancedCacheIntegration } from '../core/enhanced-cache-integration.js';
 import { TestScenarioCache } from '../core/test-scenario-cache.js';
 import { TestPatternMatcher } from '../core/test-pattern-matcher.js';
+import { ProtocolValidationLayer } from '../core/protocol-validation-layer.js';
 
 // __dirname is available in CommonJS mode
 
@@ -81,6 +82,9 @@ let page: Page | null = null;
 
 // Enhanced cache integration
 let enhancedCache: EnhancedCacheIntegration | null = null;
+
+// Protocol validation layer
+let protocolValidation: ProtocolValidationLayer | null = null;
 
 // Event collectors
 let consoleMessages: ConsoleMessageEntry[] = [];
@@ -284,6 +288,18 @@ async function ensureBrowser(sessionName: string | null = null): Promise<Page> {
     enhancedCache.setPage(page, currentUrl, sessionName || undefined);
     console.error(`[Claude-Playwright MCP] Enhanced cache system initialized for ${currentUrl}`);
     
+    // Initialize protocol validation layer
+    if (!protocolValidation) {
+      protocolValidation = new ProtocolValidationLayer({
+        enabled: true,
+        strictMode: false,       // Lenient mode for dev
+        sanitizeInputs: true,    // Always sanitize for security
+        enableRecovery: true,    // Enable error recovery
+        maxRecoveryAttempts: 3   // Try recovery up to 3 times
+      });
+      console.error(`[Claude-Playwright MCP] Protocol validation layer initialized`);
+    }
+    
     console.error(`[Claude-Playwright MCP] Context ready${sessionName ? ` with session: ${sessionName}` : ''}`);
   }
   
@@ -297,17 +313,57 @@ function clearCollectedData(): void {
   dialogHandlers = [];
 }
 
+// Protocol-validated tool wrapper
+async function executeValidatedTool<T extends Record<string, any>>(
+  toolName: string, 
+  params: T, 
+  implementation: (validatedParams: T) => Promise<any>
+): Promise<any> {
+  try {
+    // Validate tool call through protocol layer
+    if (protocolValidation) {
+      const validated = await protocolValidation.processToolCall(toolName, params);
+      
+      // Execute with validated parameters
+      const result = await implementation(validated.params);
+      
+      // Validate response before returning
+      const validatedResponse = await protocolValidation.processResponse(result);
+      return validatedResponse;
+    } else {
+      // Fallback: execute without validation if not available
+      console.error(`[Protocol Warning] Validation layer not available for ${toolName}`);
+      return await implementation(params);
+    }
+  } catch (error) {
+    // Handle protocol validation errors
+    if (protocolValidation && error instanceof Error) {
+      const errorResponse = await protocolValidation.processErrorResponse(error);
+      return errorResponse;
+    } else {
+      // Standard error response
+      return {
+        content: [{
+          type: "text",
+          text: `Tool execution error: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+}
+
 // ============= CONSOLE & DEBUGGING TOOLS =============
 
-// Tool: browser_console_messages
+// Tool: browser_console_messages (with protocol validation)
 server.tool(
   "browser_console_messages",
   "Get all console messages from the browser",
   {
     filter: z.enum(['all', 'error', 'warning', 'info', 'log']).optional().describe("Filter by message type")
   },
-  async ({ filter = 'all' }) => {
-    try {
+  async (params) => {
+    return await executeValidatedTool("browser_console_messages", params, async ({ filter = 'all' }) => {
       let messages = consoleMessages;
       
       if (filter !== 'all') {
@@ -333,16 +389,7 @@ server.tool(
           text: `Console Messages (last 20):\n${formatted}`
         }]
       };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        content: [{
-          type: "text",
-          text: `Failed to get console messages: ${errorMessage}`
-        }],
-        isError: true
-      };
-    }
+    });
   }
 );
 
@@ -1809,6 +1856,67 @@ server.tool(
         isError: true
       };
     }
+  }
+);
+
+// ============= PROTOCOL VALIDATION DEBUG TOOL =============
+
+// Tool: protocol_validation_status
+server.tool(
+  "protocol_validation_status", 
+  "Get protocol validation statistics and debug information",
+  {},
+  async () => {
+    return await executeValidatedTool("protocol_validation_status", {}, async () => {
+      if (!protocolValidation) {
+        return {
+          content: [{
+            type: "text",
+            text: "❌ Protocol validation layer not initialized"
+          }],
+          isError: true
+        };
+      }
+      
+      const stats = protocolValidation.getStats();
+      
+      const report = `=== Protocol Validation Status ===
+
+Configuration:
+✅ Validation Layer: Active
+✅ Error Recovery: Enabled  
+✅ Input Sanitization: Enabled
+✅ Strict Mode: Disabled (lenient for dev)
+
+Performance Metrics:
+📊 Total Messages Processed: ${stats.totalMessages}
+✅ Valid Messages: ${stats.validMessages}
+❌ Invalid Messages: ${stats.invalidMessages}  
+🔄 Recovered Messages: ${stats.recoveredMessages}
+📈 Success Rate: ${stats.successRate}%
+🛠️ Recovery Rate: ${stats.recoveryRate}%
+⚡ Avg Validation Time: ${stats.averageValidationTime.toFixed(2)}ms
+
+System Health:
+${stats.successRate > 90 ? '🟢 Excellent' : 
+  stats.successRate > 75 ? '🟡 Good' : 
+  stats.successRate > 50 ? '🟠 Fair' : '🔴 Poor'} - Protocol compliance at ${stats.successRate}%
+${stats.recoveryRate > 80 ? '🟢 Excellent' : 
+  stats.recoveryRate > 50 ? '🟡 Good' : '🟠 Needs Improvement'} - Error recovery capability
+
+Recommendations:
+${stats.successRate < 95 ? '• Consider reviewing message formats in client applications' : ''}
+${stats.recoveryRate < 80 ? '• Monitor error patterns for protocol compliance issues' : ''}
+${stats.averageValidationTime > 10 ? '• Validation overhead is high, consider optimizing' : ''}
+${stats.totalMessages === 0 ? '• No messages processed yet - validation system ready' : ''}`;
+
+      return {
+        content: [{
+          type: "text",
+          text: report
+        }]
+      };
+    });
   }
 );
 

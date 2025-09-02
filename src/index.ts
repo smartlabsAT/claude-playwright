@@ -17,3 +17,8 @@ export * from './types/cli-types';
 export { SessionHelper } from './utils/session-helper';
 export { MCPIntegration } from './utils/mcp-integration';
 export { ProjectPaths } from './utils/project-paths';
+
+// Protocol Validation exports (Phase 0)
+export { DefaultMCPProtocolValidator, ProtocolError } from './core/protocol-validator';
+export { ProtocolValidationLayer } from './core/protocol-validation-layer';
+export { ProtocolErrorRecovery } from './core/protocol-error-recovery';
