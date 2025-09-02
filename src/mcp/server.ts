@@ -7,6 +7,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ProjectPaths } from '../utils/project-paths.js';
 import { EnhancedCacheIntegration } from '../core/enhanced-cache-integration.js';
+import { TestScenarioCache } from '../core/test-scenario-cache.js';
+import { TestPatternMatcher } from '../core/test-pattern-matcher.js';
 
 // __dirname is available in CommonJS mode
 
@@ -739,6 +741,116 @@ server.tool(
   }
 );
 
+// ============= TEST EXECUTION FUNCTIONS =============
+
+/**
+ * Execute a test scenario with real browser actions
+ */
+async function executeTestScenarioWithBrowser(
+  scenario: any, 
+  adaptContext?: {url?: string, profile?: string}
+): Promise<{success: boolean, adaptations: string[], executionTime: number}> {
+  const startTime = Date.now();
+  const adaptations: string[] = [];
+  let success = true;
+  
+  console.error(`[MCP Server] 🚀 Executing test scenario: ${scenario.name}`);
+  console.error(`[MCP Server] 📋 Steps: ${scenario.steps.length}`);
+  
+  try {
+    // Ensure browser is available
+    const page = await ensureBrowser();
+    
+    // Execute each step
+    for (let i = 0; i < scenario.steps.length; i++) {
+      const step = scenario.steps[i];
+      console.error(`[MCP Server] Step ${i + 1}/${scenario.steps.length}: ${step.action} - ${step.description}`);
+      
+      try {
+        await executeTestStep(page, step, adaptContext, adaptations);
+      } catch (error) {
+        console.error(`[MCP Server] ❌ Step ${i + 1} failed:`, error);
+        success = false;
+        break;
+      }
+    }
+    
+    const executionTime = Date.now() - startTime;
+    
+    // Record execution in cache
+    const cache = ensureTestCache();
+    const status: 'success' | 'failure' | 'partial' | 'adapted' = success ? 
+      (adaptations.length > 0 ? 'adapted' : 'success') : 'failure';
+    await cache.recordTestExecution(scenario.name, status, executionTime, adaptations, adaptContext);
+    await cache.updateTestSuccessRate(scenario.name, success);
+    
+    console.error(`[MCP Server] ${success ? '✅' : '❌'} Test completed in ${executionTime}ms`);
+    
+    return { success, adaptations, executionTime };
+    
+  } catch (error) {
+    const executionTime = Date.now() - startTime;
+    console.error(`[MCP Server] ❌ Test execution failed:`, error);
+    return { success: false, adaptations, executionTime };
+  }
+}
+
+/**
+ * Execute a single test step with real browser action
+ */
+async function executeTestStep(
+  page: any, 
+  step: any, 
+  adaptContext?: {url?: string, profile?: string}, 
+  adaptations?: string[]
+): Promise<void> {
+  const stepStartTime = Date.now();
+  
+  switch (step.action) {
+    case 'navigate':
+      let targetUrl = step.target;
+      
+      // Apply URL adaptation if provided
+      if (adaptContext?.url) {
+        const originalDomain = new URL(step.target).origin;
+        const newDomain = adaptContext.url.startsWith('http') ? 
+          new URL(adaptContext.url).origin : adaptContext.url;
+        targetUrl = step.target.replace(originalDomain, newDomain);
+        
+        if (targetUrl !== step.target) {
+          adaptations?.push(`URL adapted: ${step.target} → ${targetUrl}`);
+          console.error(`[MCP Server] 🔄 URL adapted: ${targetUrl}`);
+        }
+      }
+      
+      console.error(`[MCP Server] 🌐 Navigating to: ${targetUrl}`);
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
+      break;
+      
+    case 'click':
+      console.error(`[MCP Server] 👆 Clicking: ${step.target}`);
+      await page.click(step.target);
+      break;
+      
+    case 'type':
+      console.error(`[MCP Server] ⌨️ Typing "${step.value}" into: ${step.target}`);
+      await page.fill(step.target, step.value);
+      break;
+      
+    case 'screenshot':
+      console.error(`[MCP Server] 📸 Taking screenshot`);
+      await page.screenshot({ fullPage: false });
+      break;
+      
+    default:
+      console.error(`[MCP Server] ⚠️ Unknown action: ${step.action}`);
+      throw new Error(`Unknown test action: ${step.action}`);
+  }
+  
+  const stepTime = Date.now() - stepStartTime;
+  console.error(`[MCP Server] ✅ Step "${step.action}" completed in ${stepTime}ms`);
+}
+
 // ============= CORE NAVIGATION TOOLS =============
 
 // Core tool: browser_navigate with BASE_URL support
@@ -1133,6 +1245,566 @@ server.tool(
         content: [{
           type: "text",
           text: `Close failed: ${errorMessage}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// ============= INTELLIGENT TEST MANAGEMENT TOOLS =============
+
+// Test scenario cache instance
+
+let testCache: TestScenarioCache | null = null;
+let patternMatcher: TestPatternMatcher | null = null;
+
+function ensureTestCache(): TestScenarioCache {
+  if (!testCache) {
+    testCache = new TestScenarioCache();
+    console.error('[Claude-Playwright MCP] Initialized TestScenarioCache');
+  }
+  return testCache;
+}
+
+function ensurePatternMatcher(): TestPatternMatcher {
+  if (!patternMatcher) {
+    const cache = ensureTestCache();
+    patternMatcher = new TestPatternMatcher(cache);
+    console.error('[Claude-Playwright MCP] Initialized TestPatternMatcher');
+  }
+  return patternMatcher;
+}
+
+// Tool: browser_save_test
+server.tool(
+  "browser_save_test",
+  "Save current interaction sequence as reusable test scenario",
+  {
+    name: z.string().describe("Name for the test scenario"),
+    description: z.string().optional().describe("Optional description of the test"),
+    steps: z.array(z.object({
+      action: z.enum(['navigate', 'click', 'type', 'wait', 'assert', 'screenshot']),
+      target: z.string().optional(),
+      value: z.string().optional(),
+      selector: z.string().optional(),
+      timeout: z.number().optional(),
+      description: z.string().describe("Description of the step")
+    })).describe("Array of test steps to save"),
+    tags: z.array(z.string()).optional().describe("Optional tags for categorization"),
+    profile: z.string().optional().describe("Browser profile name")
+  },
+  async ({ name, description, steps, tags, profile }) => {
+    try {
+      if (!page) {
+        return {
+          content: [{
+            type: "text",
+            text: "No active page. Navigate to a page first."
+          }],
+          isError: true
+        };
+      }
+
+      const cache = ensureTestCache();
+      const currentUrl = page.url();
+      
+      const scenario = {
+        name,
+        description,
+        steps,
+        tags,
+        urlPattern: currentUrl,
+        profile
+      };
+
+      const scenarioId = await cache.saveTestScenario(scenario);
+      
+      return {
+        content: [{
+          type: "text",
+          text: `✅ Test scenario '${name}' saved successfully with ID ${scenarioId}\n` +
+                `📍 URL Pattern: ${currentUrl}\n` +
+                `📋 Steps: ${steps.length}\n` +
+                `🏷️ Tags: ${tags ? tags.join(', ') : 'none'}\n` +
+                `👤 Profile: ${profile || 'default'}`
+        }]
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Failed to save test scenario: ${errorMessage}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Tool: browser_find_similar_tests
+server.tool(
+  "browser_find_similar_tests", 
+  "Find similar test scenarios based on intent and context",
+  {
+    query: z.string().describe("Search query describing the test intent"),
+    url: z.string().optional().describe("Target URL to match against"),
+    profile: z.string().optional().describe("Browser profile to filter by"),
+    limit: z.number().optional().default(5).describe("Maximum number of results")
+  },
+  async ({ query, url, profile, limit = 5 }) => {
+    try {
+      const cache = ensureTestCache();
+      const targetUrl = url || (page ? page.url() : undefined);
+      
+      const results = await cache.findSimilarTests(query, targetUrl, profile, limit);
+      
+      if (results.length === 0) {
+        return {
+          content: [{
+            type: "text", 
+            text: `🔍 No similar tests found for: "${query}"`
+          }]
+        };
+      }
+
+      const formatted = results.map((result, i) => {
+        const scenario = result.scenario;
+        const adaptations = result.adaptationSuggestions || [];
+        
+        return `${i + 1}. **${scenario.name}** (${(result.similarity * 100).toFixed(1)}% similarity)\n` +
+               `   📝 ${scenario.description || 'No description'}\n` +
+               `   🎯 Confidence: ${(result.confidence * 100).toFixed(1)}%\n` +
+               `   📍 URL: ${scenario.urlPattern}\n` +
+               `   📋 Steps: ${scenario.steps.length}\n` +
+               `   🏷️ Tags: ${scenario.tags ? scenario.tags.join(', ') : 'none'}\n` +
+               (adaptations.length > 0 ? 
+                 `   🔧 Adaptations: ${adaptations.join(', ')}\n` : '') +
+               `   ⚡ Actions: ${scenario.steps.map(s => s.action).join(' → ')}`;
+      }).join('\n\n');
+
+      return {
+        content: [{
+          type: "text",
+          text: `🎯 Found ${results.length} similar tests for: "${query}"\n\n${formatted}`
+        }]
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Failed to search tests: ${errorMessage}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Tool: browser_run_test  
+server.tool(
+  "browser_run_test",
+  "Execute a saved test scenario with intelligent adaptation",
+  {
+    testName: z.string().describe("Name of the test scenario to run"),
+    adaptContext: z.object({
+      url: z.string().optional(),
+      profile: z.string().optional()
+    }).optional().describe("Optional context for test adaptation")
+  },
+  async ({ testName, adaptContext }) => {
+    try {
+      const cache = ensureTestCache();
+      const matcher = ensurePatternMatcher();
+      
+      // Get test scenario from cache
+      const scenario = await cache.getTestScenarioByName(testName);
+      if (!scenario) {
+        throw new Error(`Test scenario '${testName}' not found`);
+      }
+      
+      // Execute with real browser integration
+      const result = await executeTestScenarioWithBrowser(scenario, adaptContext);
+      
+      const statusIcon = result.success ? '✅' : '❌';
+      const statusText = result.success ? 'SUCCESS' : 'FAILED';
+      
+      let output = `${statusIcon} Test '${testName}' ${statusText}\n`;
+      output += `⏱️ Execution Time: ${result.executionTime}ms\n`;
+      
+      if (result.adaptations.length > 0) {
+        output += `🔧 Adaptations Applied: ${result.adaptations.length}\n`;
+        output += result.adaptations.map(a => `   • ${a}`).join('\n');
+      }
+      
+      return {
+        content: [{
+          type: "text",
+          text: output
+        }]
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{
+          type: "text", 
+          text: `❌ Test execution failed: ${errorMessage}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Tool: browser_test_library
+server.tool(
+  "browser_test_library",
+  "Show comprehensive test library with statistics and filtering",
+  {
+    profile: z.string().optional().describe("Filter by browser profile"),
+    tag: z.string().optional().describe("Filter by tag"),
+    urlPattern: z.string().optional().describe("Filter by URL pattern")
+  },
+  async ({ profile, tag, urlPattern }) => {
+    try {
+      const cache = ensureTestCache();
+      
+      // Get library statistics
+      const stats = await cache.getTestLibraryStats();
+      
+      // Get filtered scenarios
+      const scenarios = await cache.listTestScenarios({ profile, tag, urlPattern });
+      
+      let output = `📚 **Test Library Statistics**\n`;
+      output += `📊 Total Tests: ${stats.totalTests}\n`;
+      output += `📈 Average Success Rate: ${(stats.avgSuccessRate * 100).toFixed(1)}%\n`;
+      output += `🏃 Total Executions: ${stats.totalExecutions}\n\n`;
+      
+      if (scenarios.length === 0) {
+        output += `🔍 No tests found matching the current filters.`;
+      } else {
+        output += `🎯 **Available Tests** (${scenarios.length} found):\n\n`;
+        
+        scenarios.forEach((scenario, i) => {
+          output += `${i + 1}. **${scenario.name}**\n`;
+          output += `   📝 ${scenario.description || 'No description'}\n`;
+          output += `   📍 URL: ${scenario.urlPattern}\n`;
+          output += `   📋 Steps: ${scenario.steps.length} (${scenario.steps.map(s => s.action).join(' → ')})\n`;
+          output += `   🏷️ Tags: ${scenario.tags ? scenario.tags.join(', ') : 'none'}\n`;
+          output += `   👤 Profile: ${scenario.profile || 'default'}\n\n`;
+        });
+      }
+      
+      return {
+        content: [{
+          type: "text",
+          text: output
+        }]
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Failed to load test library: ${errorMessage}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Tool: browser_suggest_actions
+server.tool(
+  "browser_suggest_actions",
+  "Get intelligent action suggestions based on current context and learned patterns",
+  {
+    intent: z.string().optional().describe("Optional intent description for more targeted suggestions")
+  },
+  async ({ intent }) => {
+    try {
+      if (!page) {
+        return {
+          content: [{
+            type: "text",
+            text: "No active page. Navigate to a page first."
+          }],
+          isError: true
+        };
+      }
+
+      const matcher = ensurePatternMatcher();
+      const context = {
+        url: page.url(),
+        profile: 'default', // Could be enhanced to detect actual profile
+        pageTitle: await page.title(),
+        recentActions: [] // Could be enhanced to track recent actions
+      };
+
+      if (intent) {
+        // Find patterns matching the intent
+        const patterns = await matcher.findMatchingPatterns(context, intent);
+        
+        if (patterns.length === 0) {
+          return {
+            content: [{
+              type: "text",
+              text: `💡 No specific patterns found for "${intent}". Try being more specific or save this as a new test pattern.`
+            }]
+          };
+        }
+
+        let output = `🎯 **Pattern Matches for "${intent}"**:\n\n`;
+        patterns.forEach((pattern, i) => {
+          output += `${i + 1}. **Pattern ${pattern.matchedPattern.type}** (${(pattern.confidence * 100).toFixed(1)}% confidence)\n`;
+          output += `   🎯 Similarity: ${(pattern.similarityScore * 100).toFixed(1)}%\n`;
+          output += `   🔧 Actions: ${pattern.matchedPattern.actions.join(', ')}\n`;
+          if (pattern.suggestedAdaptations.length > 0) {
+            output += `   💡 Suggestions: ${pattern.suggestedAdaptations.slice(0, 2).join(', ')}\n`;
+          }
+          output += '\n';
+        });
+
+        return {
+          content: [{
+            type: "text", 
+            text: output
+          }]
+        };
+      } else {
+        // General action suggestions
+        const suggestions = await matcher.suggestTestActions(context);
+        
+        if (suggestions.length === 0) {
+          return {
+            content: [{
+              type: "text",
+              text: `💡 No specific suggestions for current context. Consider interacting with the page to learn patterns.`
+            }]
+          };
+        }
+
+        const output = `💡 **Suggested Actions** (based on learned patterns):\n\n` +
+                      suggestions.map((suggestion, i) => `${i + 1}. ${suggestion}`).join('\n');
+
+        return {
+          content: [{
+            type: "text",
+            text: output
+          }]
+        };
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Failed to generate suggestions: ${errorMessage}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Tool: browser_adapt_test
+server.tool(
+  "browser_adapt_test",
+  "Intelligently adapt an existing test scenario to current context",
+  {
+    testName: z.string().describe("Name of the test scenario to adapt"),
+    newName: z.string().optional().describe("Optional new name for adapted test"),
+    saveAdapted: z.boolean().optional().default(false).describe("Whether to save the adapted test as new scenario")
+  },
+  async ({ testName, newName, saveAdapted = false }) => {
+    try {
+      if (!page) {
+        return {
+          content: [{
+            type: "text",
+            text: "No active page. Navigate to a page first."
+          }],
+          isError: true
+        };
+      }
+
+      const cache = ensureTestCache();
+      const matcher = ensurePatternMatcher();
+      
+      // Get original scenario
+      const scenarios = await cache.listTestScenarios();
+      const originalScenario = scenarios.find(s => s.name === testName);
+      
+      if (!originalScenario) {
+        return {
+          content: [{
+            type: "text",
+            text: `❌ Test scenario '${testName}' not found.`
+          }],
+          isError: true
+        };
+      }
+
+      const context = {
+        url: page.url(),
+        profile: 'default',
+        pageTitle: await page.title()
+      };
+
+      const adaptation = await matcher.adaptTestScenario(originalScenario, context);
+      
+      let output = `🔄 **Test Adaptation for '${testName}'**\n\n`;
+      output += `📍 Original URL: ${originalScenario.urlPattern}\n`;
+      output += `📍 Target URL: ${context.url}\n`;
+      output += `🔧 Adaptations: ${adaptation.adaptations.length}\n\n`;
+      
+      if (adaptation.adaptations.length > 0) {
+        output += `**Adaptations Made:**\n`;
+        adaptation.adaptations.forEach((adapt, i) => {
+          output += `${i + 1}. ${adapt}\n`;
+        });
+        output += '\n';
+      }
+
+      output += `**Adapted Test Steps:**\n`;
+      adaptation.adaptedScenario.steps.forEach((step, i) => {
+        output += `${i + 1}. ${step.action.toUpperCase()}: ${step.description}\n`;
+        if (step.selector) output += `   🎯 Selector: ${step.selector}\n`;
+        if (step.target) output += `   🎯 Target: ${step.target}\n`;
+        if (step.value) output += `   💭 Value: ${step.value}\n`;
+      });
+
+      if (saveAdapted) {
+        const adaptedName = newName || `${testName} (Adapted)`;
+        const adaptedScenario = { ...adaptation.adaptedScenario, name: adaptedName };
+        await cache.saveTestScenario(adaptedScenario);
+        output += `\n✅ Adapted test saved as '${adaptedName}'`;
+      }
+
+      return {
+        content: [{
+          type: "text",
+          text: output
+        }]
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{
+          type: "text", 
+          text: `❌ Test adaptation failed: ${errorMessage}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Tool: browser_delete_test
+server.tool(
+  "browser_delete_test",
+  "Delete test scenarios with flexible options",
+  {
+    testName: z.string().optional().describe("Name of the test scenario to delete"),
+    deleteAll: z.boolean().optional().default(false).describe("Delete all test scenarios"),
+    tag: z.string().optional().describe("Delete all tests with this tag"),
+    confirmDelete: z.boolean().optional().default(false).describe("Skip confirmation prompt (use with caution)")
+  },
+  async ({ testName, deleteAll = false, tag, confirmDelete = false }) => {
+    try {
+      const cache = ensureTestCache();
+      
+      // Delete specific test by name
+      if (testName) {
+        const deleted = await cache.deleteTestScenario(testName);
+        
+        if (deleted) {
+          return {
+            content: [{
+              type: "text",
+              text: `✅ Test scenario '${testName}' deleted successfully`
+            }]
+          };
+        } else {
+          return {
+            content: [{
+              type: "text",
+              text: `❌ Test scenario '${testName}' not found`
+            }],
+            isError: true
+          };
+        }
+      }
+      
+      // Delete all tests
+      if (deleteAll) {
+        if (!confirmDelete) {
+          return {
+            content: [{
+              type: "text",
+              text: `⚠️ WARNING: This will delete ALL test scenarios and their execution history.\nTo confirm, call this tool again with confirmDelete: true\n\nThis action cannot be undone!`
+            }]
+          };
+        }
+        
+        const result = await cache.deleteAllTestScenarios();
+        
+        if (result.deleted > 0) {
+          return {
+            content: [{
+              type: "text",
+              text: `✅ Deleted ${result.deleted} test scenarios and ${result.executionsDeleted} executions`
+            }]
+          };
+        } else {
+          return {
+            content: [{
+              type: "text",
+              text: `ℹ️ No test scenarios found to delete`
+            }]
+          };
+        }
+      }
+      
+      // Delete by tag
+      if (tag) {
+        const result = await cache.deleteTestScenariosByTag(tag);
+        
+        if (result.deleted > 0) {
+          return {
+            content: [{
+              type: "text", 
+              text: `✅ Deleted ${result.deleted} test scenarios with tag '${tag}' and ${result.executionsDeleted} executions`
+            }]
+          };
+        } else {
+          return {
+            content: [{
+              type: "text",
+              text: `❌ No test scenarios found with tag '${tag}'`
+            }],
+            isError: true
+          };
+        }
+      }
+      
+      // No valid options provided
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Please specify what to delete:\n• testName: Delete specific test\n• deleteAll: Delete all tests (requires confirmDelete: true)\n• tag: Delete tests with specific tag`
+        }],
+        isError: true
+      };
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Failed to delete test scenarios: ${errorMessage}`
         }],
         isError: true
       };

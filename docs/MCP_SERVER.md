@@ -392,6 +392,122 @@ Handle browser dialogs (alert, confirm, prompt).
 "Enter 'yes' in the prompt"
 ```
 
+### 🧠 Intelligent Test Management Tools (NEW - 2025-09-01)
+
+#### `browser_save_test`
+Save current interaction sequence as reusable test scenario.
+
+**Parameters:**
+- `testName` (string): Name for the test
+- `description` (string, optional): Test description
+- `tags` (string, optional): Comma-separated tags
+- `url` (string, optional): URL pattern for the test
+
+**Examples in Claude:**
+```
+"Save this login workflow as a test called 'User Authentication'"
+"Create a test named 'Checkout Process' with tag 'ecommerce'"
+```
+
+#### `browser_find_similar_tests`
+AI-powered semantic test discovery and matching.
+
+**Parameters:**
+- `query` (string): Search query or intent description
+- `limit` (number, optional): Maximum number of results (default: 10)
+
+**Examples in Claude:**
+```
+"Find tests similar to login workflow"
+"Show me all authentication-related tests"
+"Search for todo management tests"
+```
+
+#### `browser_run_test`
+Execute saved test with intelligent adaptation and context switching.
+
+**Parameters:**
+- `testName` (string): Name of the test to run
+- `url` (string, optional): URL to adapt the test for
+- `profile` (string, optional): Browser profile to use
+- `saveAdapted` (boolean, optional): Save adaptations back to the test
+
+**Examples in Claude:**
+```
+"Run the User Login test on staging.myapp.com"
+"Execute the Checkout Process test with mobile profile"
+"Run User Authentication test and save any adaptations"
+```
+
+#### `browser_test_library`
+Browse complete test library with statistics and filtering.
+
+**Parameters:**
+- `tag` (string, optional): Filter by tag
+- `limit` (number, optional): Maximum number of results
+- `showStats` (boolean, optional): Include execution statistics
+
+**Examples in Claude:**
+```
+"Show all my saved tests"
+"List authentication tests with statistics"
+"Browse ecommerce tests from the library"
+```
+
+#### `browser_suggest_actions`
+Get intelligent action suggestions based on learned patterns.
+
+**Parameters:**
+- `context` (string, optional): Current context or intent
+- `limit` (number, optional): Maximum number of suggestions
+
+**Examples in Claude:**
+```
+"Suggest next actions for this page"
+"What can I do here based on similar patterns?"
+"Show me recommended test actions"
+```
+
+#### `browser_adapt_test`
+Intelligently adapt existing tests to new contexts and environments.
+
+**Parameters:**
+- `testName` (string): Name of the test to adapt
+- `targetUrl` (string): URL to adapt for
+- `profile` (string, optional): Target browser profile
+- `saveAdapted` (boolean, optional): Save as new adapted test
+
+**Examples in Claude:**
+```
+"Adapt User Login test for production environment"
+"Modify Checkout Process test for mobile profile"
+"Update Registration test for new staging URL"
+```
+
+#### `browser_delete_test` (NEW - 2025-09-01)
+Delete test scenarios with flexible options.
+
+**Parameters:**
+- `testName` (string, optional): Name of specific test to delete
+- `deleteAll` (boolean, optional): Delete all tests (default: false)
+- `tag` (string, optional): Delete all tests with specific tag
+- `confirmDelete` (boolean, optional): Skip confirmation prompts (default: false)
+
+**Examples in Claude:**
+```
+"Delete the test named 'User Login'"
+"Delete all test scenarios"
+"Delete all tests tagged as 'auth'"
+"Remove outdated tests without confirmation"
+```
+
+**Features:**
+- **Single Test Deletion**: Delete specific tests by name
+- **Bulk Operations**: Delete all tests or filter by tags
+- **Safety Confirmations**: Prompts for destructive operations
+- **Force Delete**: Skip confirmations for automation
+- **Cascade Deletion**: Properly handles related execution history
+
 ### Window Management
 
 #### `browser_resize`

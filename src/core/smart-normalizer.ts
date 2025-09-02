@@ -368,4 +368,20 @@ export class SmartNormalizer {
     permute([...tokens]);
     return result;
   }
+
+  /**
+   * Calculate Jaccard similarity between two texts
+   * Returns similarity score between 0 (no similarity) and 1 (identical)
+   */
+  calculateJaccardSimilarity(text1: string, text2: string): number {
+    if (!text1 || !text2) return 0;
+    
+    const tokens1 = new Set(text1.toLowerCase().split(/\s+/).filter(t => t.length > 0));
+    const tokens2 = new Set(text2.toLowerCase().split(/\s+/).filter(t => t.length > 0));
+    
+    const intersection = new Set([...tokens1].filter(x => tokens2.has(x)));
+    const union = new Set([...tokens1, ...tokens2]);
+    
+    return union.size > 0 ? intersection.size / union.size : 0;
+  }
 }
