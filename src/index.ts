@@ -22,3 +22,7 @@ export { ProjectPaths } from './utils/project-paths';
 export { DefaultMCPProtocolValidator, ProtocolError } from './core/protocol-validator';
 export { ProtocolValidationLayer } from './core/protocol-validation-layer';
 export { ProtocolErrorRecovery } from './core/protocol-error-recovery';
+
+// Tool Naming Revolution exports (Phase 1)
+export { ToolNamingStrategy } from './core/tool-naming-strategy';
+export { ProgressiveToolLoader } from './core/progressive-tool-loader';
