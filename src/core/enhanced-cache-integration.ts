@@ -124,6 +124,93 @@ export class EnhancedCacheIntegration {
     }
   }
 
+  // Enhanced wrapper with Phase 2.2 enhanced cache key support
+  async wrapSelectorOperationEnhanced<T>(
+    testName: string,
+    description: string,
+    url: string,
+    operation: (selector: string) => Promise<T>,
+    steps?: any[],
+    profile?: string,
+    page?: any
+  ): Promise<{ result: T; cached: boolean; performance: any }> {
+    const startTime = Date.now();
+    
+    try {
+      // Use enhanced cache key system for lookup
+      const enhancedResult = await this.bidirectionalCache.getEnhanced(
+        testName,
+        url,
+        steps,
+        profile || this.currentProfile || 'default',
+        page || this.currentPage
+      );
+
+      if (enhancedResult) {
+        // Try cached selector
+        try {
+          const result = await operation(enhancedResult.selector);
+          const endTime = Date.now();
+          
+          console.error(`[EnhancedCache] ✅ Enhanced cache HIT: ${testName} → ${enhancedResult.selector} [${endTime - startTime}ms]`);
+          
+          return {
+            result,
+            cached: true,
+            performance: {
+              duration: endTime - startTime,
+              cacheHit: true,
+              source: enhancedResult.source
+            }
+          };
+        } catch (error) {
+          console.error(`[EnhancedCache] Enhanced cache selector failed, will learn new one:`, error);
+        }
+      }
+
+      // No cached result or cached selector failed - need to find working selector
+      // For now, use the fallback approach until we have full selector discovery
+      const fallbackSelector = description; // Use description as selector attempt
+      
+      try {
+        const result = await operation(fallbackSelector);
+        
+        // Learn this working selector with enhanced cache key system
+        await this.bidirectionalCache.setEnhanced(
+          testName,
+          description,
+          url,
+          fallbackSelector,
+          steps,
+          profile || this.currentProfile || 'default',
+          page || this.currentPage
+        );
+
+        const endTime = Date.now();
+        console.error(`[EnhancedCache] ✅ Enhanced cache MISS → LEARN: ${testName} → ${fallbackSelector} [${endTime - startTime}ms]`);
+        
+        return {
+          result,
+          cached: false,
+          performance: {
+            duration: endTime - startTime,
+            cacheHit: false,
+            learned: true
+          }
+        };
+      } catch (error) {
+        const endTime = Date.now();
+        console.error(`[EnhancedCache] ❌ Enhanced operation failed after ${endTime - startTime}ms:`, error);
+        throw error;
+      }
+
+    } catch (error) {
+      const endTime = Date.now();
+      console.error(`[EnhancedCache] Enhanced operation failed after ${endTime - startTime}ms:`, error);
+      throw error;
+    }
+  }
+
   // Snapshot operations (using bidirectional cache)
   async getCachedSnapshot(): Promise<any | null> {
     if (!this.currentPage) return null;
@@ -186,8 +273,8 @@ export class EnhancedCacheIntegration {
     try {
       // Simple DOM fingerprint based on structure
       const domStructure = await this.currentPage.evaluate(() => {
-        const elements = document.querySelectorAll('*');
-        const tags = Array.from(elements).map(el => el.tagName.toLowerCase());
+        const elements = (globalThis as any).document.querySelectorAll('*');
+        const tags = Array.from(elements).map((el: any) => el.tagName.toLowerCase());
         return tags.slice(0, 50).join(','); // First 50 elements
       });
       
@@ -257,7 +344,42 @@ export class EnhancedCacheIntegration {
     }
   }
 
-  private generateRecommendations(tieredStats: any, bidirectionalStats: any): string[] {
+  // Enhanced Phase 2.4: DOM Signature Metrics Collection
+  private async getDOMSignatureMetrics(): Promise<any> {
+    try {
+      return await this.bidirectionalCache.getDOMSignatureStats();
+    } catch (error) {
+      console.error('[EnhancedCache] DOM signature metrics error:', error);
+      return {
+        generated: 0,
+        cached: 0,
+        hitRate: 0,
+        avgConfidence: 0,
+        changeDetections: 0,
+        crossEnvMatches: 0,
+        changeDetectionRate: 0
+      };
+    }
+  }
+  
+  // Enhanced Phase 2.4: Enhanced Cache Key Metrics
+  private async getEnhancedKeyMetrics(): Promise<any> {
+    try {
+      return await this.bidirectionalCache.getEnhancedKeyStats();
+    } catch (error) {
+      console.error('[EnhancedCache] Enhanced key metrics error:', error);
+      return {
+        hits: 0,
+        misses: 0,
+        adaptations: 0,
+        falsePositiveRate: 0,
+        portabilityRate: 0,
+        matchAccuracy: 0
+      };
+    }
+  }
+  
+  private generateRecommendations(tieredStats: any, bidirectionalStats: any, domSignatureMetrics?: any, enhancedKeyMetrics?: any): string[] {
     const recommendations = [];
     
     if (tieredStats.tiered.overallHitRate < 50) {
@@ -274,6 +396,19 @@ export class EnhancedCacheIntegration {
     
     if (this.navigationCount > 10) {
       recommendations.push("Frequent navigation detected - cache is adapting well");
+    }
+    
+    // Enhanced Phase 2.4: DOM signature and enhanced key recommendations
+    if (domSignatureMetrics?.hitRate < 70) {
+      recommendations.push("Low DOM signature hit rate - consider improving page structure consistency");
+    }
+    
+    if (enhancedKeyMetrics?.falsePositiveRate > 5) {
+      recommendations.push("High false positive rate - consider tightening similarity thresholds");
+    }
+    
+    if (enhancedKeyMetrics?.portabilityRate < 60) {
+      recommendations.push("Low cross-environment portability - enhance cache key normalization");
     }
     
     return recommendations;

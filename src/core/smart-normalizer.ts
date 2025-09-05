@@ -6,7 +6,7 @@ interface PositionalKeyword {
   context?: string;
 }
 
-interface InputFeatures {
+export interface InputFeatures {
   hasId: boolean;
   hasClass: boolean;
   hasQuoted: boolean;
@@ -383,5 +383,80 @@ export class SmartNormalizer {
     const union = new Set([...tokens1, ...tokens2]);
     
     return union.size > 0 ? intersection.size / union.size : 0;
+  }
+
+  /**
+   * Context-aware similarity calculation
+   * Integrates with ContextAwareSimilarity for enhanced matching
+   */
+  calculateContextAwareSimilarity(
+    text1: string, 
+    text2: string, 
+    context?: {
+      currentUrl?: string;
+      operationType?: 'test_search' | 'cache_lookup' | 'pattern_match' | 'cross_env' | 'default';
+      profile?: string;
+      domainMatch?: boolean;
+    }
+  ): number {
+    // Lazy load to avoid circular dependencies
+    const { contextAwareSimilarity } = require('./context-aware-similarity.js');
+    
+    if (!context || !context.currentUrl) {
+      // Fallback to basic Jaccard similarity
+      return this.calculateJaccardSimilarity(text1, text2);
+    }
+    
+    const similarityContext = {
+      currentUrl: context.currentUrl,
+      profile: context.profile || 'default',
+      domainMatch: context.domainMatch || false,
+      operationType: context.operationType || 'default'
+    };
+    
+    return contextAwareSimilarity.calculateSimilarity(text1, text2, similarityContext);
+  }
+
+  /**
+   * Enhanced similarity that automatically detects action conflicts
+   * Returns -1 if actions conflict (should prevent matching)
+   */
+  calculateSimilarityWithActionDetection(text1: string, text2: string): number {
+    // Lazy load to avoid circular dependencies
+    const { contextAwareSimilarity } = require('./context-aware-similarity.js');
+    
+    // Check for conflicting actions first
+    if (contextAwareSimilarity.hasConflictingActions(text1, text2)) {
+      return -1; // Special value indicating conflict
+    }
+    
+    // Check for exact action match boost
+    const baseSimilarity = this.calculateJaccardSimilarity(text1, text2);
+    if (contextAwareSimilarity.hasExactActionMatch(text1, text2)) {
+      return Math.min(1, baseSimilarity + 0.2); // Boost exact matches
+    }
+    
+    return baseSimilarity;
+  }
+
+  /**
+   * Get context-appropriate threshold for similarity matching
+   */
+  getThresholdForOperation(operationType: 'test_search' | 'cache_lookup' | 'pattern_match' | 'cross_env' | 'default' = 'default'): number {
+    // Lazy load to avoid circular dependencies
+    const { SIMILARITY_THRESHOLDS } = require('./context-aware-similarity.js');
+    
+    return SIMILARITY_THRESHOLDS[operationType] || SIMILARITY_THRESHOLDS.default;
+  }
+
+  /**
+   * Check if similarity meets context-appropriate threshold
+   */
+  meetsThresholdForOperation(
+    similarity: number, 
+    operationType: 'test_search' | 'cache_lookup' | 'pattern_match' | 'cross_env' | 'default' = 'default'
+  ): boolean {
+    const threshold = this.getThresholdForOperation(operationType);
+    return similarity >= threshold;
   }
 }

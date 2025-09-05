@@ -3,7 +3,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import chalk from 'chalk';
 import { ProjectPaths } from '../utils/project-paths.js';
-import * as inquirer from 'inquirer';
+import inquirer from 'inquirer';
 
 export function createMcpCommand(): Command {
   const mcp = new Command('mcp');

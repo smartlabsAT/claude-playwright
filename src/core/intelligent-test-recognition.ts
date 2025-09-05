@@ -155,8 +155,8 @@ export class IntelligentTestRecognition {
       for (const scenario of scenarios) {
         const scenarioActions = scenario.steps.map(s => s.action).join(' ');
         const similarity = this.normalizer.calculateJaccardSimilarity(
-          normalizedActions.normalizedText,
-          this.normalizer.normalize(scenarioActions).normalizedText
+          normalizedActions.normalized,
+          this.normalizer.normalize(scenarioActions).normalized
         );
 
         if (similarity > bestMatch.similarity) {

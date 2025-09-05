@@ -78,7 +78,7 @@ export async function showCacheInfo(): Promise<void> {
     }
     
   } catch (error) {
-    console.error(chalk.red('❌ Failed to get cache info:'), error.message);
+    console.error(chalk.red('❌ Failed to get cache info:'), error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }
@@ -124,7 +124,7 @@ export async function clearCache(options: { force?: boolean } = {}): Promise<voi
     console.log(chalk.gray('The cache will rebuild automatically as you use Claude Code'));
     
   } catch (error) {
-    console.error(chalk.red('❌ Failed to clear cache:'), error.message);
+    console.error(chalk.red('❌ Failed to clear cache:'), error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }
@@ -169,7 +169,7 @@ export async function showCacheHealth(): Promise<void> {
       } else if (hitRate > 60) {
         console.log(`   ${chalk.yellow('⚠️ ')} Good hit rate (${hitRate}%) - room for improvement`);
       } else if (hitRate > 40) {
-        console.log(`   ${chalk.orange('⚠️ ')} Moderate hit rate (${hitRate}%) - consider cache tuning`);
+        console.log(`   ${chalk.yellow('⚠️ ')} Moderate hit rate (${hitRate}%) - consider cache tuning`);
       } else {
         console.log(`   ${chalk.red('❌')} Low hit rate (${hitRate}%) - cache may need rebuilding`);
       }
@@ -188,7 +188,7 @@ export async function showCacheHealth(): Promise<void> {
     console.log(chalk.gray('💡 Tip: Run "claude-playwright cache clear" if you experience reliability issues'));
     
   } catch (error) {
-    console.error(chalk.red('❌ Health check failed:'), error.message);
+    console.error(chalk.red('❌ Health check failed:'), error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }
@@ -212,6 +212,6 @@ export async function debugCache(): Promise<void> {
   try {
     await showCacheInfo();
   } catch (error) {
-    console.error(chalk.red('❌ Debug failed:'), error.message);
+    console.error(chalk.red('❌ Debug failed:'), error instanceof Error ? error.message : String(error));
   }
 }

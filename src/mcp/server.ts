@@ -995,21 +995,30 @@ server.tool(
         return true;
       };
 
-      // PURE CACHE APPROACH - NO selector logic in MCP!
-      // The cache system handles ALL selector intelligence
-      const result = await enhancedCache.wrapSelectorOperation(
+      // Enhanced cache approach with Phase 2.2 enhanced cache keys
+      // Supports cross-environment caching and improved pattern matching
+      const currentUrl = page.url();
+      const testName = `Click ${selector}`;
+      const currentProfile = 'default'; // TODO: Get from session context
+      
+      const result = await enhancedCache.wrapSelectorOperationEnhanced(
+        testName,
         selector, // Human-readable input
+        currentUrl,
         operation,
-        selector  // Let cache figure out the best selector
+        undefined, // No steps for single operations
+        currentProfile || 'default',
+        page // Provide page for DOM signature generation
       );
 
       const cacheStatus = result.cached ? '(cached)' : '(learned)';
       const performance = result.performance.duration;
+      const domMetrics = result.performance.domSignature ? ` [DOM:${result.performance.domSignature.confidence}]` : '';
       
       return {
         content: [{
           type: "text",
-          text: `Clicked element: ${selector} ${cacheStatus} [${performance}ms]`
+          text: `Clicked element: ${selector} ${cacheStatus} [${performance}ms]${domMetrics}`
         }]
       };
 
@@ -1053,33 +1062,20 @@ server.tool(
         return await page.fill(resolvedSelector, text);
       };
 
-      // Try enhanced cache with input field strategies
-      let result;
-      try {
-        result = await enhancedCache.wrapSelectorOperation(
-          selector,
-          operation,
-          selector
-        );
-      } catch {
-        // Fallback for input fields
-        const inputSelector = `input[placeholder*="${selector}"]`;
-        try {
-          result = await enhancedCache.wrapSelectorOperation(
-            selector,
-            operation,
-            inputSelector
-          );
-        } catch {
-          // Last fallback: general input
-          const generalSelector = 'input[type="text"], input[type="email"], textarea';
-          result = await enhancedCache.wrapSelectorOperation(
-            selector,
-            operation,
-            generalSelector
-          );
-        }
-      }
+      // Enhanced cache approach with Phase 2.2 enhanced cache keys for typing
+      const currentUrl = page.url();
+      const testName = `Type into ${selector}`;
+      const currentProfile = 'default'; // TODO: Get from session context
+      
+      const result = await enhancedCache.wrapSelectorOperationEnhanced(
+        testName,
+        selector,
+        currentUrl,
+        operation,
+        undefined, // No steps for single operations
+        currentProfile || 'default',
+        page
+      );
 
       const cacheStatus = result.cached ? '(cached)' : '(learned)';
       const performance = result.performance.duration;
@@ -1243,9 +1239,63 @@ server.tool(
         report += `Learning Rate: ${(metrics.storage.learning_rate || 0).toFixed(1)}%\n\n`;
       }
       
+      // Enhanced Phase 2.4: DOM Signature Metrics
+      report += "=== DOM Signature Metrics ===\n";
+      if (metrics.domSignatures) {
+        report += `Generated Signatures: ${metrics.domSignatures.generated || 0}\n`;
+        report += `Cached Signatures: ${metrics.domSignatures.cached || 0}\n`;
+        report += `Signature Hit Rate: ${(metrics.domSignatures.hitRate || 0).toFixed(1)}%\n`;
+        report += `Avg Confidence Score: ${(metrics.domSignatures.avgConfidence || 0).toFixed(2)}\n`;
+        report += `DOM Change Detections: ${metrics.domSignatures.changeDetections || 0}\n`;
+        report += `Cross-env Matches: ${metrics.domSignatures.crossEnvMatches || 0}\n\n`;
+      } else {
+        report += "No DOM signature data available\n\n";
+      }
+      
+      // Enhanced Phase 2.4: Cache Key Analysis
+      report += "=== Enhanced Cache Key Analysis ===\n";
+      if (metrics.enhancedKeys) {
+        report += `Enhanced Cache Hits: ${metrics.enhancedKeys.hits || 0}\n`;
+        report += `Enhanced Cache Misses: ${metrics.enhancedKeys.misses || 0}\n`;
+        report += `Context Adaptations: ${metrics.enhancedKeys.adaptations || 0}\n`;
+        report += `False Positive Rate: ${(metrics.enhancedKeys.falsePositiveRate || 0).toFixed(2)}%\n`;
+        report += `Cross-env Portability: ${(metrics.enhancedKeys.portabilityRate || 0).toFixed(1)}%\n\n`;
+      } else {
+        report += "Enhanced cache key metrics not available\n\n";
+      }
+      
+      // Enhanced Phase 2.4: Performance Target Validation
+      report += "=== Performance Target Status (GitHub Issue #11) ===\n";
+      const hitRate = metrics.performance?.overallHitRate || 0;
+      const matchAccuracy = metrics.enhancedKeys?.matchAccuracy || 0;
+      const portability = metrics.enhancedKeys?.portabilityRate || 0;
+      const changeDetection = metrics.domSignatures?.changeDetectionRate || 0;
+      const falsePositiveRate = metrics.enhancedKeys?.falsePositiveRate || 0;
+      
+      report += `Cache Hit Rate: ${hitRate.toFixed(1)}% ${hitRate >= 85 ? '✅' : '❌'} (Target: >85%)\n`;
+      report += `Test Matching Accuracy: ${matchAccuracy.toFixed(1)}% ${matchAccuracy >= 90 ? '✅' : '❌'} (Target: >90%)\n`;
+      report += `Cross-env Portability: ${portability.toFixed(1)}% ${portability >= 80 ? '✅' : '❌'} (Target: >80%)\n`;
+      report += `DOM Change Detection: ${changeDetection.toFixed(1)}% ${changeDetection >= 95 ? '✅' : '❌'} (Target: >95%)\n`;
+      report += `False Positive Rate: ${falsePositiveRate.toFixed(2)}% ${falsePositiveRate <= 5 ? '✅' : '❌'} (Target: <5%)\n\n`;
+      
       if (metrics.recommendations && metrics.recommendations.length > 0) {
         report += "=== Recommendations ===\n";
         for (const rec of metrics.recommendations) {
+          report += `• ${rec}\n`;
+        }
+      }
+      
+      // Add Phase 2.4 specific recommendations based on performance targets
+      const phase24Recommendations: string[] = [];
+      if (hitRate < 85) phase24Recommendations.push("Improve cache hit rate through better DOM signature matching");
+      if (matchAccuracy < 90) phase24Recommendations.push("Enhance test matching accuracy with improved similarity algorithms");
+      if (portability < 80) phase24Recommendations.push("Improve cross-environment portability through enhanced cache keys");
+      if (changeDetection < 95) phase24Recommendations.push("Enhance DOM change detection sensitivity");
+      if (falsePositiveRate > 5) phase24Recommendations.push("Reduce false positives through stricter similarity thresholds");
+      
+      if (phase24Recommendations.length > 0) {
+        report += "\n=== Phase 2.4 Specific Recommendations ===\n";
+        for (const rec of phase24Recommendations) {
           report += `• ${rec}\n`;
         }
       }
@@ -1370,7 +1420,8 @@ server.tool(
         profile
       };
 
-      const scenarioId = await cache.saveTestScenario(scenario);
+      // Use enhanced cache key system for test scenario storage
+      const scenarioId = await cache.saveTestScenarioEnhanced(scenario, page);
       
       return {
         content: [{
@@ -1410,7 +1461,8 @@ server.tool(
       const cache = ensureTestCache();
       const targetUrl = url || (page ? page.url() : undefined);
       
-      const results = await cache.findSimilarTests(query, targetUrl, profile, limit);
+      // Use enhanced cache key system for improved test discovery
+      const results = await cache.findSimilarTestsEnhanced(query, targetUrl, profile, undefined, limit, page);
       
       if (results.length === 0) {
         return {
