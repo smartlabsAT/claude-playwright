@@ -282,7 +282,7 @@ export class TieredCache {
     }
 
     // Generate UNIVERSAL fallback selectors
-    const universalFallbacks = this.generateUniversalFallbacks(description, fallbackSelector);
+    const universalFallbacks = this.generateUniversalFallbacks(description, fallbackSelector || null);
     
     console.error(`[TieredCache] Trying ${universalFallbacks.length} universal fallbacks for "${description}"`);
     
@@ -303,8 +303,7 @@ export class TieredCache {
         return { 
           result, 
           cached: false, 
-          selector: currentSelector,
-          performance: { duration, fallbackIndex: i + 1 }
+          selector: currentSelector
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);

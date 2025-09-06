@@ -82,6 +82,7 @@ function showCacheHelp(action?: string): void {
   console.log(chalk.gray('📚 For more information: https://github.com/smartlabsAT/claude-playwright'));
 }
 import { createMcpCommand } from '../commands/mcp';
+import { createMigrationCommand } from '../commands/migration';
 
 const program = new Command();
 
@@ -1141,6 +1142,9 @@ function showTestHelp(): void {
 
 // Add MCP subcommand
 program.addCommand(createMcpCommand());
+
+// Add migration subcommand  
+program.addCommand(createMigrationCommand());
 
 // Always run when executed directly (not when imported as module)
 program.parseAsync(process.argv).catch((error) => {

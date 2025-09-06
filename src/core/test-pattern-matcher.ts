@@ -59,7 +59,9 @@ export class TestPatternMatcher {
       for (const pattern of patterns) {
         const confidence = this.calculatePatternConfidence(normalizedIntent, pattern, context);
         
-        if (confidence > 0.3) { // Minimum confidence threshold
+        // Use context-aware threshold for pattern matching
+        const threshold = this.normalizer.getThresholdForOperation('pattern_match');
+        if (confidence > threshold) {
           const adaptations = this.generateAdaptations(pattern, context);
           const similarity = this.calculateSimilarityScore(normalizedIntent, pattern);
 
@@ -255,7 +257,7 @@ export class TestPatternMatcher {
   }
 
   /**
-   * Calculate similarity between intent and pattern
+   * Calculate similarity between intent and pattern using context-aware methods
    */
   private calculateIntentSimilarity(normalizedIntent: NormalizationResult, pattern: TestPattern): number {
     const patternText = [
@@ -265,10 +267,15 @@ export class TestPatternMatcher {
     ].join(' ');
     
     const normalizedPattern = this.normalizer.normalize(patternText);
-    return this.normalizer.calculateJaccardSimilarity(
-      normalizedIntent.normalizedText,
-      normalizedPattern.normalizedText
+    
+    // Use action detection to prevent conflicting patterns
+    const similarity = this.normalizer.calculateSimilarityWithActionDetection(
+      normalizedIntent.normalized,
+      normalizedPattern.normalized
     );
+    
+    // Return 0 if actions conflict (similarity === -1)
+    return similarity === -1 ? 0 : similarity;
   }
 
   /**
@@ -554,7 +561,7 @@ export class TestPatternMatcher {
   private async findSelectorFallback(originalSelector: string, url: string): Promise<string | null> {
     try {
       // Use existing BidirectionalCache lookup
-      const result = await this.cache.getSelector('fallback search', url, 'default');
+      const result = await this.cache.get('fallback search', url);
       return result?.selector || null;
     } catch {
       return null;

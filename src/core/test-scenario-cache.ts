@@ -74,11 +74,164 @@ interface TestSearchResult {
 }
 
 export class TestScenarioCache extends BidirectionalCache {
-  private normalizer: SmartNormalizer;
-
   constructor() {
     super();
-    this.normalizer = new SmartNormalizer();
+  }
+
+  /**
+   * Save a test scenario with enhanced cache key support
+   */
+  async saveTestScenarioEnhanced(scenario: TestScenario, page?: any): Promise<number> {
+    try {
+      const now = Date.now();
+      
+      // Save using traditional method first
+      const scenarioId = await this.saveTestScenario(scenario);
+      
+      // Store enhanced cache key representation
+      await this.setEnhanced(
+        scenario.name,
+        scenario.description || scenario.name,
+        scenario.urlPattern,
+        `test-scenario:${scenario.name}`,
+        scenario.steps,
+        scenario.profile || 'default',
+        page
+      );
+
+      console.error(`[TestScenarioCache] ✅ Saved enhanced test scenario '${scenario.name}' with ID ${scenarioId}`);
+      return scenarioId;
+      
+    } catch (error) {
+      console.error(`[TestScenarioCache] ❌ Failed to save enhanced test scenario:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Find test scenarios using enhanced cache key pattern matching
+   */
+  async findSimilarTestsEnhanced(
+    query: string, 
+    url?: string, 
+    profile?: string, 
+    steps?: TestStep[],
+    limit: number = 5,
+    page?: any
+  ): Promise<TestSearchResult[]> {
+    try {
+      // Try enhanced lookup first
+      const enhancedResult = await this.getEnhanced(query, url || '*', steps, profile, page);
+      
+      if (enhancedResult && enhancedResult.selector.startsWith('test-scenario:')) {
+        // Extract test name from selector
+        const testName = enhancedResult.selector.replace('test-scenario:', '');
+        
+        // Get full scenario details
+        const scenario = await this.getTestScenario(testName);
+        if (scenario) {
+          return [{
+            scenario,
+            similarity: enhancedResult.confidence,
+            confidence: enhancedResult.confidence,
+            adaptationSuggestions: [`Enhanced match via URL pattern: ${url}`]
+          }];
+        }
+      }
+
+      // Fallback to traditional search
+      return this.findSimilarTests(query, url, profile, limit);
+      
+    } catch (error) {
+      console.error('[TestScenarioCache] Enhanced search failed, falling back to traditional:', error);
+      return this.findSimilarTests(query, url, profile, limit);
+    }
+  }
+
+  /**
+   * Adapt a test scenario for a new environment using enhanced cache keys
+   */
+  async adaptTestScenarioEnhanced(
+    testName: string,
+    newUrl: string,
+    newProfile?: string,
+    page?: any
+  ): Promise<TestScenario | null> {
+    try {
+      const originalScenario = await this.getTestScenario(testName);
+      if (!originalScenario) {
+        console.error(`[TestScenarioCache] Test scenario '${testName}' not found`);
+        return null;
+      }
+
+      // Create adapted scenario with new URL pattern
+      const adaptedScenario: TestScenario = {
+        ...originalScenario,
+        urlPattern: newUrl,
+        profile: newProfile || originalScenario.profile
+      };
+
+      // Store enhanced cache key for adapted scenario
+      await this.setEnhanced(
+        `${testName} (adapted)`,
+        originalScenario.description || testName,
+        newUrl,
+        `test-scenario:${testName}`,
+        originalScenario.steps,
+        newProfile || 'default',
+        page
+      );
+
+      console.error(`[TestScenarioCache] ✅ Adapted test scenario '${testName}' for ${newUrl}`);
+      return adaptedScenario;
+
+    } catch (error) {
+      console.error(`[TestScenarioCache] ❌ Failed to adapt test scenario '${testName}':`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get enhanced statistics for test scenarios
+   */
+  getEnhancedTestStats(): any {
+    try {
+      const baseStats = this.getEnhancedKeyStats();
+      
+      // Get test-specific statistics
+      const testScenarioStats = this.db.prepare(`
+        SELECT 
+          COUNT(*) as total_scenarios,
+          AVG(success_rate) as avg_success_rate,
+          COUNT(CASE WHEN success_rate > 0.8 THEN 1 END) as high_success_scenarios,
+          COUNT(CASE WHEN total_runs > 0 THEN 1 END) as executed_scenarios
+        FROM test_scenarios
+      `).get() as {
+        total_scenarios: number;
+        avg_success_rate: number;
+        high_success_scenarios: number;
+        executed_scenarios: number;
+      } | undefined;
+
+      const enhancedTestEntries = this.db.prepare(`
+        SELECT COUNT(*) as count 
+        FROM cache_keys_v2 
+        WHERE selector LIKE 'test-scenario:%'
+      `).get() as { count: number };
+
+      return {
+        ...baseStats,
+        test_scenarios: testScenarioStats,
+        enhanced_test_entries: enhancedTestEntries.count,
+        coverage: {
+          enhanced_vs_traditional: enhancedTestEntries.count / (testScenarioStats?.total_scenarios || 1)
+        }
+      };
+
+    } catch (error) {
+      console.error('[TestScenarioCache] Enhanced test stats failed:', error);
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   /**
@@ -164,10 +317,12 @@ export class TestScenarioCache extends BidirectionalCache {
             profile: scenarioEntry.profile || undefined
           };
 
-          // Calculate similarity using SmartNormalizer
-          const similarity = this.calculateTestSimilarity(normalizedQuery, scenario, scenarioEntry);
+          // Calculate similarity using context-aware system
+          const similarity = this.calculateTestSimilarity(normalizedQuery, scenario, scenarioEntry, url);
 
-          if (similarity > 0.2) { // Minimum similarity threshold
+          // Use context-aware threshold for test search
+          const threshold = this.normalizer.getThresholdForOperation('test_search');
+          if (similarity > threshold) {
             results.push({
               scenario,
               similarity,
@@ -274,7 +429,7 @@ export class TestScenarioCache extends BidirectionalCache {
     const patternData = {
       steps: scenario.steps.map(step => ({
         action: step.action,
-        target: step.target ? this.normalizer.normalize(step.target).normalizedText : null
+        target: step.target ? this.normalizer.normalize(step.target).normalized : null
       })),
       urlPattern: scenario.urlPattern
     };
@@ -344,50 +499,105 @@ export class TestScenarioCache extends BidirectionalCache {
   }
 
   /**
-   * Calculate similarity between query and test scenario
+   * Calculate similarity between query and test scenario using context-aware methods
    */
-  private calculateTestSimilarity(normalizedQuery: any, scenario: TestScenario, entry: TestScenarioEntry): number {
+  private calculateTestSimilarity(normalizedQuery: any, scenario: TestScenario, entry: TestScenarioEntry, url?: string): number {
     let totalSimilarity = 0;
     let factors = 0;
 
-    // Name similarity
-    const nameSimilarity = this.normalizer.calculateJaccardSimilarity(
-      normalizedQuery.normalized,
-      this.normalizer.normalize(scenario.name).normalized
-    );
+    // Determine if this is cross-environment comparison
+    const isUrls = url && entry.url_pattern;
+    const crossEnvironment = isUrls && !this.urlsMatch(url, entry.url_pattern);
+    const operationType = crossEnvironment ? 'cross_env' : 'test_search';
+
+    const context = url ? {
+      currentUrl: url,
+      operationType: operationType as any,
+      profile: entry.profile || 'default',
+      domainMatch: !crossEnvironment
+    } : undefined;
+
+    // Name similarity with action conflict detection
+    const nameQuery = normalizedQuery.normalized;
+    const nameCandidate = this.normalizer.normalize(scenario.name).normalized;
+    
+    let nameSimilarity: number;
+    if (context) {
+      nameSimilarity = this.normalizer.calculateContextAwareSimilarity(nameQuery, nameCandidate, context);
+      // Skip if actions conflict
+      if (nameSimilarity === -1) {
+        console.error(`[TestScenarioCache] Skipping test due to action conflict: "${nameQuery}" vs "${nameCandidate}"`);
+        return 0;
+      }
+    } else {
+      nameSimilarity = this.normalizer.calculateJaccardSimilarity(nameQuery, nameCandidate);
+    }
+    
     totalSimilarity += nameSimilarity * 0.4;
     factors += 0.4;
 
     // Description similarity
     if (scenario.description) {
-      const descSimilarity = this.normalizer.calculateJaccardSimilarity(
-        normalizedQuery.normalized,
-        this.normalizer.normalize(scenario.description).normalized
-      );
+      const descCandidate = this.normalizer.normalize(scenario.description).normalized;
+      let descSimilarity: number;
+      
+      if (context) {
+        descSimilarity = this.normalizer.calculateContextAwareSimilarity(nameQuery, descCandidate, context);
+        if (descSimilarity === -1) descSimilarity = 0; // Convert conflict to zero similarity
+      } else {
+        descSimilarity = this.normalizer.calculateJaccardSimilarity(nameQuery, descCandidate);
+      }
+      
       totalSimilarity += descSimilarity * 0.3;
       factors += 0.3;
     }
 
     // Steps similarity
     const stepsText = scenario.steps.map(s => s.description).join(' ');
-    const stepsSimilarity = this.normalizer.calculateJaccardSimilarity(
-      normalizedQuery.normalized,
-      this.normalizer.normalize(stepsText).normalized
-    );
+    const stepsCandidate = this.normalizer.normalize(stepsText).normalized;
+    let stepsSimilarity: number;
+    
+    if (context) {
+      stepsSimilarity = this.normalizer.calculateContextAwareSimilarity(nameQuery, stepsCandidate, context);
+      if (stepsSimilarity === -1) stepsSimilarity = 0; // Convert conflict to zero similarity
+    } else {
+      stepsSimilarity = this.normalizer.calculateJaccardSimilarity(nameQuery, stepsCandidate);
+    }
+    
     totalSimilarity += stepsSimilarity * 0.2;
     factors += 0.2;
 
     // Tags similarity
     if (scenario.tags && scenario.tags.length > 0) {
-      const tagsSimilarity = this.normalizer.calculateJaccardSimilarity(
-        normalizedQuery.normalized,
-        this.normalizer.normalize(scenario.tags.join(' ')).normalized
-      );
+      const tagsCandidate = this.normalizer.normalize(scenario.tags.join(' ')).normalized;
+      let tagsSimilarity: number;
+      
+      if (context) {
+        tagsSimilarity = this.normalizer.calculateContextAwareSimilarity(nameQuery, tagsCandidate, context);
+        if (tagsSimilarity === -1) tagsSimilarity = 0; // Convert conflict to zero similarity
+      } else {
+        tagsSimilarity = this.normalizer.calculateJaccardSimilarity(nameQuery, tagsCandidate);
+      }
+      
       totalSimilarity += tagsSimilarity * 0.1;
       factors += 0.1;
     }
 
     return factors > 0 ? totalSimilarity / factors : 0;
+  }
+
+  /**
+   * Check if URLs represent the same environment/domain
+   */
+  private urlsMatch(url1: string, url2: string): boolean {
+    try {
+      const domain1 = new URL(url1).hostname;
+      const domain2 = new URL(url2).hostname;
+      return domain1 === domain2;
+    } catch {
+      // Fallback to string comparison
+      return url1.includes(url2) || url2.includes(url1);
+    }
   }
 
   /**
