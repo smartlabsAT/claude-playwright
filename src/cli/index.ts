@@ -86,10 +86,18 @@ import { createMigrationCommand } from '../commands/migration';
 
 const program = new Command();
 
-// Dynamically read version from package.json
-const packageJsonPath = path.resolve(__dirname, '../../package.json');
-const packageJson = fs.readJsonSync(packageJsonPath);
-const version = packageJson.version;
+// Dynamically read version from package.json using ProjectPaths
+import { ProjectPaths } from '../utils/project-paths';
+
+let version = '0.1.0-alpha.21'; // Fallback version
+try {
+  const projectRoot = ProjectPaths.findProjectRoot();
+  const packageJsonPath = path.join(projectRoot, 'package.json');
+  const packageJson = fs.readJsonSync(packageJsonPath);
+  version = packageJson.version;
+} catch (error) {
+  // Use fallback version if package.json can't be read
+}
 
 program
   .name('claude-playwright')
@@ -1145,6 +1153,14 @@ program.addCommand(createMcpCommand());
 
 // Add migration subcommand  
 program.addCommand(createMigrationCommand());
+
+// Add Phase 4 validation subcommand
+try {
+  const { createValidationCommand } = require('../commands/validation');
+  program.addCommand(createValidationCommand());
+} catch (error) {
+  // Validation commands not available yet - will be enabled once import issues are resolved
+}
 
 // Always run when executed directly (not when imported as module)
 program.parseAsync(process.argv).catch((error) => {

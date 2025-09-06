@@ -8,8 +8,8 @@ export { SessionManager } from './core/session-manager';
 export { BrowserProfileManager } from './core/browser-profile';
 export { BidirectionalCache } from './core/bidirectional-cache';
 
-// CLI exports (optional for programmatic use)
-export { program } from './cli/index';
+// Note: CLI program is not exported to avoid automatic execution
+// For CLI usage, use the bin entry point or import './cli/index' directly
 
 // Types
 export * from './types/cli-types';
@@ -52,3 +52,35 @@ export { ContextAwareSimilarity, SIMILARITY_THRESHOLDS, contextAwareSimilarity }
 export type { SimilarityContext } from './core/context-aware-similarity';
 export { SmartNormalizer } from './core/smart-normalizer';
 export type { NormalizationResult, InputFeatures } from './core/smart-normalizer';
+
+// Automated Testing & Performance Validation Suite exports (Phase 4)
+export { PerformanceBenchmark } from './core/performance-monitor';
+export type { 
+  PerformanceMetrics, 
+  ConsistencyMetrics, 
+  CacheMetrics, 
+  ErrorRecoveryMetrics, 
+  BenchmarkResults, 
+  CrossEnvironmentMetrics 
+} from './core/performance-monitor';
+
+export { FeatureFlagManager } from './core/feature-flag-manager';
+export type { 
+  FeatureFlagConfig, 
+  FeatureFlagMetrics, 
+  RolloutStrategy
+} from './core/feature-flag-manager';
+
+export { TestOrchestrator } from './core/test-orchestrator';
+export type { 
+  TestResults, 
+  E2EResults, 
+  FeatureFlagResults, 
+  ValidationReport 
+} from './core/test-orchestrator';
+
+export { ValidationReporter } from './core/validation-reporter';
+export type { 
+  ReportConfig, 
+  HistoricalComparison 
+} from './core/validation-reporter';
