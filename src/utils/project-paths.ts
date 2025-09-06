@@ -25,9 +25,13 @@ export class ProjectPaths {
       const markers = ['package.json', '.git', '.mcp.json', 'tsconfig.json', 'composer.json'];
       
       for (const marker of markers) {
-        if (fs.pathExistsSync(path.join(currentDir, marker))) {
-          this.projectRoot = currentDir;
-          return currentDir;
+        try {
+          if (fs.pathExistsSync(path.join(currentDir, marker))) {
+            this.projectRoot = currentDir;
+            return currentDir;
+          }
+        } catch (error) {
+          // Ignore errors and continue searching
         }
       }
 
@@ -120,8 +124,12 @@ export class ProjectPaths {
     const projectRoot = this.findProjectRoot();
     const markers = ['package.json', '.git', '.mcp.json', 'tsconfig.json'];
     
-    return markers.some(marker => 
-      fs.pathExistsSync(path.join(projectRoot, marker))
-    );
+    return markers.some(marker => {
+      try {
+        return fs.pathExistsSync(path.join(projectRoot, marker));
+      } catch (error) {
+        return false;
+      }
+    });
   }
 }
