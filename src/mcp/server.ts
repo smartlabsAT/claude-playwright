@@ -12,8 +12,12 @@ import { TestPatternMatcher } from '../core/test-pattern-matcher.js';
 import { ProtocolValidationLayer } from '../core/protocol-validation-layer.js';
 import { ToolNamingStrategy, ToolMapping } from '../core/tool-naming-strategy.js';
 import { ProgressiveToolLoader } from '../core/progressive-tool-loader.js';
-import { CircuitBreakerIntegration, executeProtectedTool } from '../core/circuit-breaker-integration.js';
+import { CircuitBreakerIntegration, executeProtectedTool, executeProtectedToolWithClaude } from '../core/circuit-breaker-integration.js';
 import { ConnectionPoolManager } from '../core/connection-pool-manager.js';
+import { GracefulDegradationIntegration } from '../core/graceful-degradation-integration.js';
+import { GracefulDegradationManager } from '../core/graceful-degradation.js';
+import { RecoveryStrategiesManager } from '../core/recovery-strategies.js';
+import { createClaudeErrorDemoTool } from './claude-error-demo-tool.js';
 
 // __dirname is available in CommonJS mode
 
@@ -98,6 +102,11 @@ let circuitBreakerIntegration: CircuitBreakerIntegration | null = null;
 
 // Connection pool manager - Phase 3B
 let connectionPoolManager: ConnectionPoolManager | null = null;
+
+// Graceful degradation integration - Phase 3C
+let gracefulDegradationIntegration: GracefulDegradationIntegration | null = null;
+let degradationManager: GracefulDegradationManager | null = null;
+let recoveryStrategiesManager: RecoveryStrategiesManager | null = null;
 
 // Event collectors
 let consoleMessages: ConsoleMessageEntry[] = [];
@@ -270,6 +279,14 @@ async function ensureBrowser(sessionName: string | null = null): Promise<Page> {
       await connectionPoolManager.initialize(browser);
       console.error('[Claude-Playwright MCP] Connection pool manager initialized for 70% efficiency improvement');
     }
+    
+    // Initialize graceful degradation system - Phase 3C
+    if (!gracefulDegradationIntegration) {
+      gracefulDegradationIntegration = GracefulDegradationIntegration.getInstance();
+      degradationManager = GracefulDegradationManager.getInstance();
+      recoveryStrategiesManager = RecoveryStrategiesManager.getInstance();
+      console.error('[Claude-Playwright MCP] Graceful degradation system initialized with 4-level progressive fallback');
+    }
   }
   
   // Create context (either first time or when switching sessions)
@@ -337,7 +354,8 @@ function clearCollectedData(): void {
 async function executeValidatedTool<T extends Record<string, any>>(
   toolName: string, 
   params: T, 
-  implementation: (validatedParams: T) => Promise<any>
+  implementation: (validatedParams: T) => Promise<any>,
+  operationDescription?: string
 ): Promise<any> {
   // Initialize circuit breaker if not available
   if (!circuitBreakerIntegration) {
@@ -345,11 +363,11 @@ async function executeValidatedTool<T extends Record<string, any>>(
     console.error('[Claude-Playwright MCP] Circuit breaker integration initialized');
   }
 
-  // Use enhanced executeProtectedTool that provides both protocol validation and circuit breaker protection
-  return await executeProtectedTool(toolName, params, implementation, protocolValidation);
+  // Use enhanced executeProtectedToolWithClaude that provides comprehensive Claude-aware error handling (Phase 3D)
+  return await executeProtectedToolWithClaude(toolName, params, implementation, protocolValidation, operationDescription);
 }
 
-// Connection pool-enhanced browser operation wrapper - Phase 3B
+// Enhanced browser operation wrapper - Phase 3A/3B/3C Integration
 async function executeBrowserOperationWithPooling<T>(
   operationType: string,
   params: any,
@@ -362,38 +380,79 @@ async function executeBrowserOperationWithPooling<T>(
     requiresNewContext?: boolean;
   } = {}
 ): Promise<T> {
-  // Ensure connection pool manager is initialized
-  if (!connectionPoolManager) {
-    // Fallback to traditional browser operation
-    console.error(`[Claude-Playwright MCP] Connection pool not available for ${operationType}, using fallback`);
-    const page = await ensureBrowser(options.sessionName || null);
-    return await operation(context!, page);
-  }
+  // Use graceful degradation if available (Phase 3C)
+  if (gracefulDegradationIntegration) {
+    try {
+      const result = await gracefulDegradationIntegration.executeBrowserOperationWithDegradation(
+        operationType,
+        operation,
+        {
+          sessionName: options.sessionName,
+          domain: options.domain,
+          profile: options.profile,
+          priority: options.priority || 'medium',
+          requiresNewContext: options.requiresNewContext || false
+        }
+      );
 
-  try {
-    // Execute browser operation with connection pooling and 70% efficiency improvement
-    const result = await connectionPoolManager.executeBrowserOperation(
-      operationType,
-      operation,
-      {
-        sessionName: options.sessionName,
-        domain: options.domain,
-        profile: options.profile,
-        priority: options.priority || 'medium',
-        requiresNewContext: options.requiresNewContext || false
+      // Log degradation-aware results
+      if (result.success) {
+        const currentLevel = degradationManager?.getCurrentLevel() || 'UNKNOWN';
+        console.error(`[Claude-Playwright MCP] ${operationType} completed at ${currentLevel} (${result.executionTime}ms, tool: ${result.toolUsed})`);
+        
+        if (result.fallbacksAttempted.length > 0) {
+          console.error(`[Claude-Playwright MCP] Fallbacks used: ${result.fallbacksAttempted.join(', ')}`);
+        }
+        
+        return result.result;
+      } else {
+        // Handle graceful failure
+        if (result.userMessage) {
+          console.error(`[Claude-Playwright MCP] ${result.userMessage}`);
+        }
+        if (result.recommendations) {
+          console.error(`[Claude-Playwright MCP] Recommendations: ${result.recommendations.join(', ')}`);
+        }
+        
+        throw result.error || new Error(`Operation ${operationType} failed in degradation mode`);
       }
-    );
-
-    // Log performance metrics
-    if (result.performance.connectionReused) {
-      console.error(`[Claude-Playwright MCP] ${operationType} completed with connection reuse (${result.performance.executionTime}ms, ${result.performance.poolUtilization.toFixed(1)}% utilization)`);
+    } catch (error) {
+      console.error(`[Claude-Playwright MCP] Graceful degradation operation '${operationType}' failed:`, error);
+      throw error;
     }
-
-    return result.result;
-  } catch (error) {
-    console.error(`[Claude-Playwright MCP] Connection pool operation '${operationType}' failed:`, error);
-    throw error;
   }
+
+  // Fallback to connection pool-enhanced operation (Phase 3B)
+  if (connectionPoolManager) {
+    try {
+      const result = await connectionPoolManager.executeBrowserOperation(
+        operationType,
+        operation,
+        {
+          sessionName: options.sessionName,
+          domain: options.domain,
+          profile: options.profile,
+          priority: options.priority || 'medium',
+          requiresNewContext: options.requiresNewContext || false
+        }
+      );
+
+      // Log performance metrics
+      if (result.performance.connectionReused) {
+        console.error(`[Claude-Playwright MCP] ${operationType} completed with connection reuse (${result.performance.executionTime}ms, ${result.performance.poolUtilization.toFixed(1)}% utilization)`);
+      }
+
+      return result.result;
+    } catch (error) {
+      console.error(`[Claude-Playwright MCP] Connection pool operation '${operationType}' failed:`, error);
+      throw error;
+    }
+  }
+
+  // Final fallback to traditional browser operation
+  console.error(`[Claude-Playwright MCP] No advanced pooling available for ${operationType}, using basic operation`);
+  const page = await ensureBrowser(options.sessionName || null);
+  return await operation(context!, page);
 }
 
 // ============= CONSOLE & DEBUGGING TOOLS =============
@@ -1373,6 +1432,261 @@ server.tool(
         content: [{
           type: "text" as const,
           text: `Enhanced cache status failed: ${errorMessage}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// ============= GRACEFUL DEGRADATION TOOLS - Phase 3C =============
+
+// Tool: browser_degradation_status (Phase 3C - Graceful Degradation)
+server.tool(
+  "browser_degradation_status", 
+  "Get current graceful degradation status and system capabilities",
+  {},
+  async () => {
+    try {
+      if (!gracefulDegradationIntegration || !degradationManager) {
+        return {
+          content: [{
+            type: "text",
+            text: "⚠️ Graceful degradation system not initialized"
+          }]
+        };
+      }
+      
+      const systemStatus = gracefulDegradationIntegration.getSystemStatus();
+      const degradationStatus = degradationManager.getDegradationStatus();
+      const metrics = degradationManager.getDegradationMetrics();
+      
+      let report = "=== Graceful Degradation Status ===\n";
+      report += `${degradationStatus.ux.messaging.title}\n`;
+      report += `Level: ${systemStatus.degradationLevel} (${degradationStatus.config.name})\n`;
+      report += `Circuit Breaker: ${systemStatus.circuitBreakerState}\n`;
+      report += `Connection Pool: ${systemStatus.connectionPoolHealth ? 'Healthy' : 'Issues'}\n`;
+      report += `Time in Level: ${Math.round(degradationStatus.timeInLevel / 1000)}s\n\n`;
+      
+      report += "=== Current Capabilities ===\n";
+      systemStatus.userGuidance.currentCapabilities.forEach(cap => {
+        report += `✓ ${cap}\n`;
+      });
+      
+      if (systemStatus.limitations.length > 0) {
+        report += "\n=== Current Limitations ===\n";
+        systemStatus.limitations.forEach(limit => {
+          report += `⚠ ${limit}\n`;
+        });
+      }
+      
+      if (systemStatus.userGuidance.alternatives.length > 0) {
+        report += "\n=== Suggested Alternatives ===\n";
+        systemStatus.userGuidance.alternatives.forEach(alt => {
+          report += `→ ${alt}\n`;
+        });
+      }
+      
+      if (systemStatus.userGuidance.expectedRecovery) {
+        report += `\n=== Recovery Information ===\n`;
+        report += `Expected recovery time: ${systemStatus.userGuidance.expectedRecovery}\n`;
+      }
+      
+      report += `\n=== Performance Impact ===\n`;
+      report += `Reliability: ${(metrics.performanceImpact.reliability * 100).toFixed(0)}%\n`;
+      report += `Speed: ${(metrics.performanceImpact.speed * 100).toFixed(0)}%\n`;
+      report += `Functionality: ${(metrics.performanceImpact.functionality * 100).toFixed(0)}%\n`;
+      
+      report += `\n=== Statistics ===\n`;
+      report += `Total degradation events: ${metrics.totalDegradationEvents}\n`;
+      report += `Recovery success rate: ${(metrics.recoverySuccessRate * 100).toFixed(1)}%\n`;
+      report += `Average recovery time: ${Math.round(metrics.averageRecoveryTime / 1000)}s\n`;
+      
+      return {
+        content: [{
+          type: "text",
+          text: report
+        }]
+      };
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[Claude-Playwright MCP] Degradation status error: ${errorMessage}`);
+      
+      return {
+        content: [{
+          type: "text",
+          text: `Degradation status failed: ${errorMessage}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Tool: browser_recovery_coordinate (Phase 3C - Recovery Coordination)
+server.tool(
+  "browser_recovery_coordinate",
+  "Coordinate recovery across all Phase 3 components (Circuit Breaker, Connection Pool, Graceful Degradation)",
+  {},
+  async () => {
+    try {
+      if (!gracefulDegradationIntegration) {
+        return {
+          content: [{
+            type: "text", 
+            text: "⚠️ Graceful degradation system not available for recovery coordination"
+          }]
+        };
+      }
+      
+      console.error('[Claude-Playwright MCP] Starting coordinated recovery...');
+      
+      const recoveryResult = await gracefulDegradationIntegration.coordinateRecovery();
+      
+      let report = "=== Coordinated Recovery Results ===\n";
+      report += `Overall Success: ${recoveryResult.overallSuccess ? '✅ SUCCESS' : '⚠️ PARTIAL/FAILED'}\n`;
+      report += `Components Targeted: ${recoveryResult.coordinatedComponents.join(', ')}\n\n`;
+      
+      if (recoveryResult.partialRecoveries.length > 0) {
+        report += "=== Successful Recoveries ===\n";
+        recoveryResult.partialRecoveries.forEach(recovery => {
+          report += `✅ ${recovery}\n`;
+        });
+        report += "\n";
+      }
+      
+      if (recoveryResult.failedRecoveries.length > 0) {
+        report += "=== Failed Recoveries ===\n"; 
+        recoveryResult.failedRecoveries.forEach(failure => {
+          report += `❌ ${failure}\n`;
+        });
+        report += "\n";
+      }
+      
+      // Show current system status after recovery
+      const systemStatus = gracefulDegradationIntegration.getSystemStatus();
+      report += "=== Post-Recovery Status ===\n";
+      report += `Degradation Level: ${systemStatus.degradationLevel}\n`;
+      report += `Circuit Breaker: ${systemStatus.circuitBreakerState}\n`;
+      report += `Connection Pool: ${systemStatus.connectionPoolHealth ? 'Healthy' : 'Issues'}\n`;
+      
+      if (recoveryResult.overallSuccess) {
+        report += "\n🎉 System recovery completed successfully! All primary functionality should now be available.";
+      } else {
+        report += "\n⚠️ Recovery was only partially successful. Some functionality may still be limited.";
+        report += "\nConsider waiting a few minutes and trying again, or check system logs for specific issues.";
+      }
+      
+      return {
+        content: [{
+          type: "text",
+          text: report
+        }]
+      };
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[Claude-Playwright MCP] Recovery coordination error: ${errorMessage}`);
+      
+      return {
+        content: [{
+          type: "text", 
+          text: `Recovery coordination failed: ${errorMessage}\n\nThis may indicate serious system issues. Consider manual intervention.`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Tool: browser_health_comprehensive (Phase 3C - Comprehensive Health Report)
+server.tool(
+  "browser_health_comprehensive",
+  "Get comprehensive health report across all Phase 3 components with user-friendly recommendations",
+  {},
+  async () => {
+    try {
+      if (!gracefulDegradationIntegration) {
+        return {
+          content: [{
+            type: "text",
+            text: "⚠️ Comprehensive health reporting not available - graceful degradation system not initialized"
+          }]
+        };
+      }
+      
+      const healthReport = await gracefulDegradationIntegration.getComprehensiveHealthReport();
+      
+      let report = "=== Comprehensive System Health Report ===\n";
+      report += `Overall Health: ${healthReport.overall.healthy ? '✅ HEALTHY' : '⚠️ ISSUES DETECTED'}\n`;
+      report += `Current Mode: ${healthReport.overall.degradationLevel} (${
+        healthReport.overall.degradationLevel === 'LEVEL_1' ? 'Full Functionality' :
+        healthReport.overall.degradationLevel === 'LEVEL_2' ? 'Simplified Mode' :
+        healthReport.overall.degradationLevel === 'LEVEL_3' ? 'Read-Only Mode' :
+        'System Monitoring Only'
+      })\n\n`;
+      
+      if (healthReport.overall.primaryIssues.length > 0) {
+        report += "=== Primary Issues ===\n";
+        healthReport.overall.primaryIssues.forEach(issue => {
+          report += `⚠️ ${issue}\n`;
+        });
+        report += "\n";
+      }
+      
+      report += "=== Component Status ===\n";
+      report += `Circuit Breaker: ${healthReport.components.circuitBreaker.enabled ? 
+        (healthReport.components.circuitBreaker.metrics.state === 'CLOSED' ? '✅ Active & Healthy' : 
+         `⚠️ ${healthReport.components.circuitBreaker.metrics.state} State`) : '❌ Disabled'}\n`;
+      report += `Connection Pool: ${healthReport.components.connectionPool.healthy ? '✅ Healthy' : '⚠️ Issues'}\n`;
+      report += `Degradation Manager: ✅ Active at ${healthReport.components.degradationManager.status.level}\n\n`;
+      
+      report += "=== Available Features ===\n";
+      healthReport.userImpact.availableFeatures.forEach(feature => {
+        report += `✅ ${feature}\n`;
+      });
+      
+      if (healthReport.userImpact.unavailableFeatures.length > 0) {
+        report += "\n=== Temporarily Unavailable ===\n";
+        healthReport.userImpact.unavailableFeatures.forEach(feature => {
+          report += `⏸️ ${feature}\n`;
+        });
+      }
+      
+      if (healthReport.userImpact.workarounds.length > 0) {
+        report += "\n=== Suggested Workarounds ===\n";
+        healthReport.userImpact.workarounds.forEach(workaround => {
+          report += `💡 ${workaround}\n`;
+        });
+      }
+      
+      if (healthReport.overall.recoveryRecommendations.length > 0) {
+        report += "\n=== Recovery Recommendations ===\n";
+        healthReport.overall.recoveryRecommendations.forEach((rec, index) => {
+          report += `${index + 1}. ${rec}\n`;
+        });
+      }
+      
+      if (healthReport.userImpact.estimatedRecoveryTime) {
+        report += `\n⏱️ Estimated recovery time: ${healthReport.userImpact.estimatedRecoveryTime}`;
+      }
+      
+      return {
+        content: [{
+          type: "text",
+          text: report
+        }]
+      };
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[Claude-Playwright MCP] Comprehensive health check error: ${errorMessage}`);
+      
+      return {
+        content: [{
+          type: "text",
+          text: `Comprehensive health check failed: ${errorMessage}`
         }],
         isError: true
       };
@@ -2649,6 +2963,9 @@ async function initializeToolNaming(): Promise<void> {
 async function main(): Promise<void> {
   // Initialize tool naming revolution
   await initializeToolNaming();
+  
+  // Register Claude-aware error handling demo tools (Phase 3D)
+  createClaudeErrorDemoTool(server, executeValidatedTool);
   
   const transport = new StdioServerTransport();
   await server.connect(transport);

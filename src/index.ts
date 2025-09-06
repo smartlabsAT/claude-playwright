@@ -52,3 +52,34 @@ export { ContextAwareSimilarity, SIMILARITY_THRESHOLDS, contextAwareSimilarity }
 export type { SimilarityContext } from './core/context-aware-similarity';
 export { SmartNormalizer } from './core/smart-normalizer';
 export type { NormalizationResult, InputFeatures } from './core/smart-normalizer';
+
+// Circuit Breaker Foundation exports (Phase 3A)
+export { MCPCircuitBreaker, ErrorClassifier, CircuitBreakerOpenError } from './core/circuit-breaker';
+export { CircuitBreakerIntegration, withCircuitBreaker, executeProtectedTool } from './core/circuit-breaker-integration';
+export type { 
+  CircuitBreakerConfig, 
+  CircuitBreakerState, 
+  ErrorType,
+  CircuitBreakerMetrics
+} from './core/circuit-breaker';
+
+// Graceful Degradation System exports (Phase 3C)
+export { GracefulDegradationManager, DEGRADATION_LEVELS, RECOVERY_STRATEGIES, UX_ENHANCEMENTS } from './core/graceful-degradation';
+export { GracefulDegradationIntegration } from './core/graceful-degradation-integration';
+export { RecoveryStrategiesManager } from './core/recovery-strategies';
+export { SIMPLIFIED_TOOL_REGISTRY, getSimplifiedTool, hasSimplifiedVersion } from './core/simplified-tools';
+export type {
+  DegradationLevel,
+  DegradationLevelConfig,
+  DegradationEvent,
+  RecoveryStrategy,
+  RecoveryAction,
+  UXEnhancement,
+  DegradationMetrics
+} from './core/graceful-degradation';
+export type {
+  AdaptiveRecoveryStrategy,
+  RecoveryExecutionContext,
+  RecoveryActionResult,
+  RecoveryAttemptRecord
+} from './core/recovery-strategies';
