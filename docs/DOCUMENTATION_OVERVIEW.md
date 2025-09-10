@@ -5,12 +5,12 @@
 ### Getting Started
 1. **[README.md](../README.md)** - Complete project overview and installation guide
 2. **[MCP_SERVER.md](MCP_SERVER.md)** - Detailed MCP integration documentation
-3. **[ARCHITECTURE.md](../ARCHITECTURE.md)** - Technical architecture overview
+3. **[CACHING.md](CACHING.md)** - Advanced caching system documentation
+4. **[INTELLIGENT_TESTING.md](INTELLIGENT_TESTING.md)** - Test management system
 
 ### Development
 1. **[CLAUDE.md](../CLAUDE.md)** - Development workflow and guidelines
 2. **[API Reference](api.md)** - Complete API documentation
-3. **[CHANGELOG.md](../CHANGELOG.md)** - Version history and release notes
 
 ## 🎯 Core Features
 
@@ -149,8 +149,8 @@ npx claude-playwright profile setup
 
 ## 🏷️ Version Information
 
-- **Current Version**: 0.1.0-alpha.16
-- **Release Stage**: Alpha
+- **Current Version**: 0.1.0
+- **Release Stage**: Stable
 - **License**: MIT
 - **Maintained by**: SmartLabs
 

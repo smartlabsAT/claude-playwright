@@ -9,7 +9,7 @@ The Claude Playwright MCP server provides Claude Code with comprehensive browser
 ### 1. Install the Package
 
 ```bash
-npm install --save-dev claude-playwright@alpha
+npm install --save-dev claude-playwright
 ```
 
 ### 2. Initialize MCP Configuration
