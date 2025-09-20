@@ -12,6 +12,7 @@ import { TestPatternMatcher } from '../core/test-pattern-matcher.js';
 import { ProtocolValidationLayer } from '../core/protocol-validation-layer.js';
 import { ToolNamingStrategy, ToolMapping } from '../core/tool-naming-strategy.js';
 import { ProgressiveToolLoader } from '../core/progressive-tool-loader.js';
+import { SecurityValidator } from '../core/security-validator.js';
 
 // __dirname is available in CommonJS mode
 
@@ -456,12 +457,14 @@ server.tool(
   "browser_evaluate",
   "Execute JavaScript in the browser context",
   {
-    script: z.string().describe("JavaScript code to execute")
+    script: SecurityValidator.JavaScriptSchema
   },
   async ({ script }) => {
     const page = await ensureBrowser();
     try {
-      const result = await page.evaluate(script);
+      // Wrap script for safer execution
+      const safeScript = SecurityValidator.wrapJavaScriptForSafeExecution(script);
+      const result = await page.evaluate(safeScript);
       
       return {
         content: [{
@@ -489,9 +492,9 @@ server.tool(
   "browser_wait_for",
   "Wait for an element or condition",
   {
-    selector: z.string().optional().describe("CSS selector to wait for"),
+    selector: SecurityValidator.SelectorSchema.optional(),
     state: z.enum(['visible', 'hidden', 'attached', 'detached']).optional().describe("State to wait for"),
-    timeout: z.number().optional().describe("Timeout in seconds (default: 30)")
+    timeout: SecurityValidator.TimeoutSchema
   },
   async ({ selector, state = 'visible', timeout = 30 }) => {
     const page = await ensureBrowser();
@@ -534,7 +537,7 @@ server.tool(
   "browser_hover",
   "Hover over an element",
   {
-    selector: z.string().describe("CSS selector of element to hover")
+    selector: SecurityValidator.SelectorSchema
   },
   async ({ selector }) => {
     const page = await ensureBrowser();
@@ -564,8 +567,8 @@ server.tool(
   "browser_select_option",
   "Select option(s) in a dropdown",
   {
-    selector: z.string().describe("CSS selector of the select element"),
-    value: z.union([z.string(), z.array(z.string())]).describe("Value(s) to select")
+    selector: SecurityValidator.SelectorSchema,
+    value: z.union([SecurityValidator.TextInputSchema, z.array(SecurityValidator.TextInputSchema)]).describe("Value(s) to select")
   },
   async ({ selector, value }) => {
     const page = await ensureBrowser();
@@ -596,7 +599,7 @@ server.tool(
   "browser_press_key",
   "Press a keyboard key",
   {
-    key: z.string().describe("Key to press (e.g., 'Enter', 'Tab', 'Escape', 'ArrowDown')")
+    key: SecurityValidator.KeyboardKeySchema
   },
   async ({ key }) => {
     const page = await ensureBrowser();
@@ -627,8 +630,8 @@ server.tool(
   "Fill multiple form fields at once",
   {
     fields: z.array(z.object({
-      selector: z.string().describe("CSS selector of the field"),
-      value: z.string().describe("Value to fill"),
+      selector: SecurityValidator.SelectorSchema,
+      value: SecurityValidator.TextInputSchema,
       type: z.enum(['text', 'checkbox', 'radio']).optional().describe("Field type")
     })).describe("Array of fields to fill")
   },
@@ -670,7 +673,7 @@ server.tool(
   "browser_session_restore",
   "Restore a saved browser session with cookies and localStorage",
   {
-    sessionName: z.string().describe("Name of the session to restore (e.g., 'test-user')")
+    sessionName: SecurityValidator.SessionNameSchema
   },
   async ({ sessionName }) => {
     try {
@@ -721,7 +724,7 @@ server.tool(
   "browser_session_save",
   "Save current browser session with cookies and localStorage",
   {
-    sessionName: z.string().describe("Name for the session (e.g., 'test-user')")
+    sessionName: SecurityValidator.SessionNameSchema
   },
   async ({ sessionName }) => {
     try {
@@ -910,7 +913,7 @@ server.tool(
   "browser_navigate",
   "Navigate to a URL with automatic BASE_URL injection",
   {
-    url: z.string().describe("URL or path to navigate to")
+    url: SecurityValidator.URLSchema.or(z.string().min(1).describe("Relative path"))
   },
   async ({ url }) => {
     const page = await ensureBrowser();
@@ -973,7 +976,7 @@ server.tool(
   "browser_click",
   "Click an element on the page",
   {
-    selector: z.string().describe("CSS selector or text to click")
+    selector: SecurityValidator.SelectorSchema
   },
   async ({ selector }) => {
     const page = await ensureBrowser();
@@ -1040,8 +1043,8 @@ server.tool(
   "browser_type",
   "Type text into an input field",
   {
-    selector: z.string().describe("CSS selector of the input field"),
-    text: z.string().describe("Text to type")
+    selector: SecurityValidator.SelectorSchema,
+    text: SecurityValidator.TextInputSchema
   },
   async ({ selector, text }) => {
     const page = await ensureBrowser();
