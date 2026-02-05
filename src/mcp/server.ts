@@ -10,8 +10,6 @@ import { EnhancedCacheIntegration } from '../core/enhanced-cache-integration.js'
 import { TestScenarioCache } from '../core/test-scenario-cache.js';
 import { TestPatternMatcher } from '../core/test-pattern-matcher.js';
 import { ProtocolValidationLayer } from '../core/protocol-validation-layer.js';
-import { ToolNamingStrategy, ToolMapping } from '../core/tool-naming-strategy.js';
-import { ProgressiveToolLoader } from '../core/progressive-tool-loader.js';
 import { SecurityValidator } from '../core/security-validator.js';
 
 // __dirname is available in CommonJS mode
@@ -88,9 +86,6 @@ let enhancedCache: EnhancedCacheIntegration | null = null;
 
 // Protocol validation layer
 let protocolValidation: ProtocolValidationLayer | null = null;
-
-// Tool naming revolution - Phase 1
-let progressiveToolLoader: ProgressiveToolLoader | null = null;
 
 // Event collectors
 let consoleMessages: ConsoleMessageEntry[] = [];
@@ -1980,82 +1975,6 @@ ${stats.totalMessages === 0 ? '• No messages processed yet - validation system
   }
 );
 
-// ============= TOOL NAMING REVOLUTION DEBUG TOOL (Phase 1) =============
-
-// Tool: mcp_toolnaming_status
-server.tool(
-  "mcp_toolnaming_status",
-  "Get tool naming revolution statistics and debug information for Phase 1 implementation",
-  {},
-  async () => {
-    return await executeValidatedTool("mcp_toolnaming_status", {}, async () => {
-      if (!progressiveToolLoader) {
-        return {
-          content: [{
-            type: "text", 
-            text: "❌ Progressive tool loader not initialized"
-          }],
-          isError: true
-        };
-      }
-
-      const loadingStats = progressiveToolLoader.getLoadingStats();
-      const stageDetails = progressiveToolLoader.getStageDetails();
-      const migrationStats = ToolNamingStrategy.getMigrationStats();
-
-      const report = `=== Phase 1: Tool Naming Revolution Status ===
-
-🎯 Phase 1 Implementation: ACTIVE
-✅ Progressive Loading: ${loadingStats.completionPercentage.toFixed(1)}% Complete
-⚡ Total Load Time: ${loadingStats.totalTime}ms
-
-Tool Migration Summary:
-📊 Total Tools Migrated: ${migrationStats.totalTools}
-🔧 Core Tools: ${migrationStats.coreTools} (immediate load)
-🧪 Testing Tools: ${migrationStats.testingTools} (100ms delay) 
-🐛 Debug Tools: ${migrationStats.debugTools} (200ms delay)
-
-Loading Stage Details:
-${stageDetails.map(stage => 
-  `Priority ${stage.priority}: ${stage.loaded ? '✅' : '⏳'} ${stage.toolCount} tools${stage.loadTime ? ` (${stage.loadTime}ms)` : ''}`
-).join('\n')}
-
-Tool Naming Strategy:
-🎯 All tools now have mcp_ prefix for better Claude recognition
-📝 Enhanced descriptions with "Primary MCP tool" language
-🔄 Progressive loading prevents Claude tool-choice overload
-⚠️ Legacy tools available with deprecation warnings (30-day support)
-
-Expected Improvements:
-• Claude should prefer mcp_ prefixed tools over built-ins
-• Better tool recognition through distinctive naming
-• Enhanced descriptions signal preference and capabilities  
-• Progressive loading reduces initial choice complexity
-
-Usage Pattern Analysis:
-💡 Claude should now consistently choose:
-  - mcp_browser_click over generic browser.click
-  - mcp_browser_navigate over standard navigation
-  - mcp_test_run over manual test execution
-  
-Next Phase Ready: ${loadingStats.completionPercentage === 100 ? 
-  '🟢 Ready for Phase 2 (Circuit Breaker)' : 
-  '🟡 Complete Phase 1 loading first'}
-
-Tool Selection Monitoring:
-📈 Monitor console for "[ToolNaming] ✅ NEW TOOL CALLED" messages
-📊 Track which tools Claude actually selects in practice
-🎯 Goal: >90% mcp_ tool preference rate`;
-
-      return {
-        content: [{
-          type: "text",
-          text: report
-        }]
-      };
-    });
-  }
-);
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
@@ -2072,82 +1991,14 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-// Tool registration function for Phase 1 Revolution
-async function registerToolWithNaming(mapping: ToolMapping, isNew: boolean): Promise<void> {
-  const toolName = isNew ? mapping.newName : mapping.oldName;
-  const description = isNew ? mapping.enhancedDescription : 
-    `${mapping.enhancedDescription} ${ToolNamingStrategy.getDeprecationMessage(mapping.oldName)}`;
-
-  // Find existing tool handler by searching for the old name in existing registrations
-  // For now, we'll create forwarding tools that delegate to existing implementations
-  
-  if (isNew) {
-    // Register new mcp_ prefixed tool with enhanced description
-    console.error(`[ToolNaming] Registering new tool: ${toolName} (${mapping.category})`);
-    
-    // Create forwarding tool that calls the existing implementation
-    server.tool(
-      toolName,
-      description,
-      {}, // Schema will be copied from original - for now empty object
-      async (params: any) => {
-        console.error(`[ToolNaming] ✅ NEW TOOL CALLED: ${toolName} (forwarding to existing logic)`);
-        
-        // This is a placeholder - the actual tool logic will be added
-        // For now, return a success message indicating the new tool was called
-        return {
-          content: [{
-            type: "text",
-            text: `✅ ${toolName} called successfully! This demonstrates the new mcp_ prefix system working. [Phase 1 Tool Naming Active]`
-          }]
-        };
-      }
-    );
-  } else {
-    // Register legacy tool with deprecation warning
-    console.error(`[ToolNaming] ⚠️ Legacy tool registered with deprecation: ${toolName}`);
-  }
-}
-
-// Initialize progressive tool loading
-async function initializeToolNaming(): Promise<void> {
-  if (!progressiveToolLoader) {
-    progressiveToolLoader = new ProgressiveToolLoader({
-      enableProgressiveLoading: true,
-      baseDelay: 1, // 1x multiplier for dev (1ms, 100ms, 200ms)
-      loadingStages: [0, 100, 200],
-      maxConcurrentLoads: 5,
-      logLoading: true
-    });
-    
-    console.error('[ToolNaming] Progressive tool loader initialized');
-    
-    // Start progressive loading of new mcp_ tools
-    await progressiveToolLoader.startLoading(registerToolWithNaming);
-    
-    // Register legacy tools with deprecation warnings (immediate)
-    await progressiveToolLoader.registerLegacyTools(registerToolWithNaming);
-    
-    const stats = ToolNamingStrategy.getMigrationStats();
-    console.error(`[ToolNaming] ✅ Tool naming revolution complete!`);
-    console.error(`[ToolNaming] Loaded ${stats.totalTools} tools: ${stats.coreTools} core, ${stats.testingTools} testing, ${stats.debugTools} debug`);
-    console.error(`[ToolNaming] Claude will now prefer mcp_ prefixed tools for enhanced reliability`);
-  }
-}
-
 // Start server
 async function main(): Promise<void> {
-  // Initialize tool naming revolution
-  await initializeToolNaming();
-  
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  
-  const stats = ToolNamingStrategy.getMigrationStats();
+
   console.error('[Claude-Playwright MCP] Server ready with BASE_URL:', BASE_URL);
   console.error('[Claude-Playwright MCP] Sessions directory:', SESSIONS_DIR);
-  console.error(`[Claude-Playwright MCP] Available tools: ${stats.totalTools * 2} tools (${stats.totalTools} mcp_ + ${stats.totalTools} legacy)`);
-  console.error('[Claude-Playwright MCP] 🎯 Phase 1: Tool Naming Revolution ACTIVE - Claude will prefer mcp_ prefixed tools');
+  console.error('[Claude-Playwright MCP] Available tools: 27 (browser_*, session_*, test_*, protocol_validation_status)');
 }
 
 main().catch((error: Error) => {
