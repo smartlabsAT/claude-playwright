@@ -53,6 +53,9 @@ export type { SimilarityContext } from './core/context-aware-similarity';
 export { SmartNormalizer } from './core/smart-normalizer';
 export type { NormalizationResult, InputFeatures } from './core/smart-normalizer';
 
+// Security Validation exports
+export { SecurityValidator } from './core/security-validator';
+
 // Automated Testing & Performance Validation Suite exports (Phase 4)
 export { PerformanceBenchmark } from './core/performance-monitor';
 export type { 
