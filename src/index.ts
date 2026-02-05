@@ -28,10 +28,6 @@ export { DefaultMCPProtocolValidator, ProtocolError } from './core/protocol-vali
 export { ProtocolValidationLayer } from './core/protocol-validation-layer';
 export { ProtocolErrorRecovery } from './core/protocol-error-recovery';
 
-// Tool Naming Revolution exports (Phase 1)
-export { ToolNamingStrategy } from './core/tool-naming-strategy';
-export { ProgressiveToolLoader } from './core/progressive-tool-loader';
-
 // Enhanced Cache Key System exports (Phase 2.2)
 export { EnhancedCacheKeyManager } from './core/enhanced-cache-key';
 export { CacheMigrationManager } from './core/cache-migration';
