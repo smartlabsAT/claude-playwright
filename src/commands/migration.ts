@@ -212,12 +212,12 @@ async function showMigrationStatus(): Promise<void> {
 
     console.log();
     console.log(chalk.cyan.bold('System Health:'));
-    
+
     // Get enhanced statistics
-    const stats = cache.getEnhancedKeyStats();
+    const stats = await cache.getEnhancedKeyStats();
     console.log(`  ${chalk.gray('Total cache entries:')} ${chalk.white(stats.enhanced_cache_keys?.total || 0)}`);
     console.log(`  ${chalk.gray('Migration progress:')} ${chalk.white((100 * (1 - status.unmigratedEntries / Math.max(status.legacyEntries, 1))).toFixed(1))}%`);
-    
+
     if (stats.performance_stats) {
       console.log(`  ${chalk.gray('Enhanced hits:')} ${chalk.white(stats.performance_stats.enhanced_hits || 0)}`);
       console.log(`  ${chalk.gray('Migrated entries:')} ${chalk.white(stats.performance_stats.migration_count || 0)}`);
@@ -436,18 +436,18 @@ async function validateMigration(): Promise<void> {
     
     console.log();
     console.log(chalk.cyan.bold('System Performance:'));
-    
+
     // Get performance statistics
-    const stats = cache.getEnhancedKeyStats();
-    
+    const stats = await cache.getEnhancedKeyStats();
+
     if (stats.performance_stats) {
       console.log(`  ${chalk.gray('Enhanced cache hits:')} ${stats.performance_stats.enhanced_hits || 0}`);
       console.log(`  ${chalk.gray('Migration count:')} ${stats.performance_stats.migration_count || 0}`);
     }
-    
+
     if (stats.enhanced_cache_keys) {
       console.log(`  ${chalk.gray('Total enhanced keys:')} ${stats.enhanced_cache_keys.total}`);
-      
+
       if (stats.enhanced_cache_keys.by_source) {
         console.log(`  ${chalk.gray('Source distribution:')}`);
         stats.enhanced_cache_keys.by_source.forEach((source: any) => {
@@ -488,19 +488,19 @@ async function showEnhancedStats(options: any): Promise<void> {
   try {
     // Initialize cache
     const cache = new BidirectionalCache();
-    const stats = cache.getEnhancedKeyStats();
-    
+    const stats = await cache.getEnhancedKeyStats();
+
     console.log(chalk.cyan.bold('Enhanced Cache Keys:'));
     if (stats.enhanced_cache_keys) {
       console.log(`  ${chalk.gray('Total entries:')} ${chalk.white(stats.enhanced_cache_keys.total)}`);
-      
+
       if (stats.enhanced_cache_keys.by_source) {
         console.log(`  ${chalk.gray('By source:')}`);
         stats.enhanced_cache_keys.by_source.forEach((source: any) => {
           console.log(`    ${chalk.white(source.migration_source)}: ${chalk.white(source.count)}`);
         });
       }
-      
+
       if (stats.enhanced_cache_keys.by_profile && options.detailed) {
         console.log(`  ${chalk.gray('By profile:')}`);
         stats.enhanced_cache_keys.by_profile.forEach((profile: any) => {

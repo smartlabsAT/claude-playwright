@@ -104,8 +104,9 @@ export function createValidationCommand(): Command {
         console.log('Once path resolution issues are fixed, full validation suite will be operational.');
         
       } catch (error) {
-        console.error(chalk.red('❌ Validation failed:'), error.message);
-        if (options.debug) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(chalk.red('❌ Validation failed:'), errorMessage);
+        if (options.debug && error instanceof Error) {
           console.error(error.stack);
         }
         process.exit(1);
