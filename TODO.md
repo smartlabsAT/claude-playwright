@@ -51,8 +51,10 @@ Verbesserungen für Zuverlässigkeit:
 
 ## 📊 Status Tracking
 
-**Current Branch:** `fix/issue-30-phase-2-critical-stability`
-**Previous Branch:** `fix/issue-30-stability-improvements` (✅ Merged in PR #31)
+**Current Branch:** `fix/issue-30-phase-3-network-typescript`
+**Previous Branches:**
+- `fix/issue-30-stability-improvements` (✅ Merged in PR #31)
+- `fix/issue-30-phase-2-critical-stability` (✅ Merged in PR #32)
 **Issue:** #30
 **Target:** v0.1.4
 **Started:** 2026-02-06
