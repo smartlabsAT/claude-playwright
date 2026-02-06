@@ -157,9 +157,37 @@ export class BidirectionalCache {
 
     // Initialize database
     const dbPath = path.join(this.cacheDir, 'bidirectional-cache.db');
-    this.db = new Database(dbPath);
+
+    // Check for existing database and perform integrity check
+    if (fs.existsSync(dbPath)) {
+      try {
+        this.db = new Database(dbPath);
+        const integrityCheck = this.db.pragma('integrity_check');
+        if (integrityCheck !== 'ok') {
+          console.error('[Cache] Database corruption detected, creating backup and rebuilding...');
+          const backupPath = `${dbPath}.corrupted.${Date.now()}`;
+          fs.renameSync(dbPath, backupPath);
+          console.error(`[Cache] Corrupted database backed up to: ${backupPath}`);
+          this.db = new Database(dbPath);
+        }
+      } catch (error) {
+        console.error('[Cache] Database initialization failed, creating new database:', error);
+        const backupPath = `${dbPath}.error.${Date.now()}`;
+        try {
+          fs.renameSync(dbPath, backupPath);
+        } catch (renameError) {
+          console.error('[Cache] Could not backup corrupted database:', renameError);
+        }
+        this.db = new Database(dbPath);
+      }
+    } else {
+      this.db = new Database(dbPath);
+    }
+
+    // Configure for maximum durability (prevents corruption)
     this.db.pragma('journal_mode = WAL');
-    this.db.pragma('synchronous = NORMAL');
+    this.db.pragma('synchronous = FULL');  // Changed from NORMAL to FULL for corruption prevention
+    this.db.pragma('wal_autocheckpoint = 1000');  // Checkpoint every 1000 pages
     
     // Initialize migration manager
     this.migrationManager = new CacheMigrationManager(this.db);
@@ -167,6 +195,25 @@ export class BidirectionalCache {
     this.initializeDatabase();
     this.performMigrationIfNeeded();
     this.startCleanupTimer();
+  }
+
+  // Transaction helpers
+  private beginTransaction = () => this.db.prepare('BEGIN IMMEDIATE').run();
+  private commitTransaction = () => this.db.prepare('COMMIT').run();
+  private rollbackTransaction = () => this.db.prepare('ROLLBACK').run();
+
+  // Execute database operation in a transaction
+  private executeInTransaction<T>(operation: () => T, operationName: string = 'database operation'): T {
+    try {
+      this.beginTransaction();
+      const result = operation();
+      this.commitTransaction();
+      return result;
+    } catch (error) {
+      this.rollbackTransaction();
+      console.error(`[Cache] Transaction failed for ${operationName}:`, error);
+      throw error;
+    }
   }
 
   private initializeDatabase(): void {
@@ -616,16 +663,14 @@ export class BidirectionalCache {
    * Update last_used timestamp for enhanced cache entry
    */
   private updateLastUsed(id: number): void {
-    try {
+    this.executeInTransaction(() => {
       const updateStmt = this.db.prepare(`
-        UPDATE cache_keys_v2 
-        SET last_used = ?, use_count = use_count + 1 
+        UPDATE cache_keys_v2
+        SET last_used = ?, use_count = use_count + 1
         WHERE id = ?
       `);
       updateStmt.run(Date.now(), id);
-    } catch (error) {
-      console.error('[BidirectionalCache] Failed to update last_used:', error);
-    }
+    }, 'update last used timestamp');
   }
 
 
@@ -634,9 +679,7 @@ export class BidirectionalCache {
     const selectorHash = this.createSelectorHash(selector);
     const normalizedResult = this.normalizer.normalize(input);
 
-    try {
-      // Begin transaction
-      const transaction = this.db.transaction(() => {
+    this.executeInTransaction(() => {
         // 1. Store/update selector
         const selectorStmt = this.db.prepare(`
           INSERT INTO selector_cache_v2 
@@ -673,17 +716,12 @@ export class BidirectionalCache {
           url,
           now
         );
-      });
 
-      transaction();
       this.stats.sets++;
+    }, 'set cache entry');
 
-      // 3. Learn from related inputs (async, non-blocking)
-      setImmediate(() => this.learnRelatedInputs(selectorHash, input, url, normalizedResult));
-
-    } catch (error) {
-      console.error('[BidirectionalCache] Set error:', error);
-    }
+    // 3. Learn from related inputs (async, non-blocking)
+    setImmediate(() => this.learnRelatedInputs(selectorHash, input, url, normalizedResult));
   }
 
   async get(input: string, url: string): Promise<LookupResult | null> {
@@ -961,20 +999,18 @@ export class BidirectionalCache {
   }
 
   private async updateUsage(selector: string, url: string): Promise<void> {
-    try {
-      const now = Date.now();
-      const selectorHash = this.createSelectorHash(selector);
-      
+    const now = Date.now();
+    const selectorHash = this.createSelectorHash(selector);
+
+    this.executeInTransaction(() => {
       const stmt = this.db.prepare(`
         UPDATE selector_cache_v2 
         SET last_used = ?, use_count = use_count + 1
         WHERE selector_hash = ? AND url = ?
       `);
-      
+
       stmt.run(now, selectorHash, url);
-    } catch (error) {
-      console.error('[BidirectionalCache] Update usage error:', error);
-    }
+    }, 'update usage statistics');
   }
 
   private async learnRelatedInputs(
@@ -1063,9 +1099,9 @@ export class BidirectionalCache {
   }
 
   private cleanup(): void {
-    try {
-      const now = Date.now();
-      
+    const now = Date.now();
+
+    this.executeInTransaction(() => {
       // Remove expired entries
       const expiredStmt = this.db.prepare(`
         DELETE FROM input_mappings 
@@ -1103,10 +1139,7 @@ export class BidirectionalCache {
         )
       `);
       orphanStmt.run();
-
-    } catch (error) {
-      console.error('[BidirectionalCache] Cleanup error:', error);
-    }
+    }, 'cleanup old entries');
   }
 
   async getStats(): Promise<any> {
@@ -1300,41 +1333,41 @@ export class BidirectionalCache {
   }
 
   async setSnapshot(key: object, value: any, options: { url?: string; profile?: string; ttl?: number; page?: any } = {}): Promise<void> {
-    try {
-      const cacheKey = this.createCacheKey(key);
-      const now = Date.now();
-      const ttl = options.ttl ?? this.options.snapshotTTL;
-      
-      // Generate DOM signature if page is provided
-      let domSignature = null;
-      let criticalHash = null;
-      let importantHash = null;
-      let contextHash = null;
+    const cacheKey = this.createCacheKey(key);
+    const now = Date.now();
+    const ttl = options.ttl ?? this.options.snapshotTTL;
 
-      if (options.page && options.url) {
-        try {
-          const signature = await this.domSignatureManager.generateSignature(options.page, options.url);
-          domSignature = signature.fullSignature;
-          criticalHash = signature.criticalHash;
-          importantHash = signature.importantHash;
-          contextHash = signature.contextHash;
-          
-          console.error(`[BidirectionalCache] Generated DOM signature: ${domSignature} (${signature.elementCounts.critical}/${signature.elementCounts.important}/${signature.elementCounts.context})`);
-        } catch (error) {
-          console.error('[BidirectionalCache] DOM signature generation failed:', error);
-        }
+    // Generate DOM signature if page is provided
+    let domSignature = null;
+    let criticalHash = null;
+    let importantHash = null;
+    let contextHash = null;
+
+    if (options.page && options.url) {
+      try {
+        const signature = await this.domSignatureManager.generateSignature(options.page, options.url);
+        domSignature = signature.fullSignature;
+        criticalHash = signature.criticalHash;
+        importantHash = signature.importantHash;
+        contextHash = signature.contextHash;
+
+        console.error(`[BidirectionalCache] Generated DOM signature: ${domSignature} (${signature.elementCounts.critical}/${signature.elementCounts.important}/${signature.elementCounts.context})`);
+      } catch (error) {
+        console.error('[BidirectionalCache] DOM signature generation failed:', error);
       }
-      
+    }
+
+    this.executeInTransaction(() => {
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO snapshot_cache
         (cache_key, url, dom_hash, snapshot_data, profile, created_at, last_used, ttl, hit_count, dom_signature, critical_hash, important_hash, context_hash)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
       `);
-      
+
       // Extract DOM hash from key if available (legacy support)
-      const domHash = typeof key === 'object' && 'domHash' in key ? 
+      const domHash = typeof key === 'object' && 'domHash' in key ?
         (key as any).domHash : 'unknown';
-      
+
       stmt.run(
         cacheKey,
         options.url || '',
@@ -1349,14 +1382,11 @@ export class BidirectionalCache {
         importantHash,
         contextHash
       );
-      
-    } catch (error) {
-      console.error('[BidirectionalCache] Set snapshot error:', error);
-    }
+    }, 'set snapshot');
   }
 
   async invalidateSnapshots(options: { url?: string; profile?: string } = {}): Promise<void> {
-    try {
+    this.executeInTransaction(() => {
       let stmt;
       let params: any[] = [];
       
@@ -1378,10 +1408,7 @@ export class BidirectionalCache {
       
       const result = stmt.run(...params);
       console.error(`[BidirectionalCache] Invalidated ${result.changes} snapshots`);
-      
-    } catch (error) {
-      console.error('[BidirectionalCache] Invalidate snapshots error:', error);
-    }
+    }, 'invalidate snapshots');
   }
 
   async getSnapshotMetrics(): Promise<any> {

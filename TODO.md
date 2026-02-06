@@ -47,10 +47,12 @@ Verbesserungen für Zuverlässigkeit:
 
 ## 📊 Status Tracking
 
-**Branch:** `fix/issue-30-stability-improvements`
+**Current Branch:** `fix/issue-30-phase-2-critical-stability`
+**Previous Branch:** `fix/issue-30-stability-improvements` (✅ Merged in PR #31)
 **Issue:** #30
 **Target:** v0.1.4
 **Started:** 2026-02-06
+**Phase 1 Merged:** 2026-02-06
 
 ### Metriken vor dem Fix
 - Memory nach 20 Sessions: ~1GB
