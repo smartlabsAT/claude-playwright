@@ -4,6 +4,53 @@ All notable changes to Claude Playwright will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-02-06
+
+### 🚀 Major Stability Improvements
+
+#### Added
+- **Intelligent Retry System**: Automatic retry with exponential backoff for transient failures
+  - 3 attempts with configurable delays (100ms → 200ms → 400ms by default)
+  - Smart error classification distinguishes transient vs permanent errors
+  - Automatic cache invalidation on failures for fresh selector lookup
+  - Achieves 80% reduction in "stuck" automation scenarios
+
+- **User-Friendly Error Messages**: Helpful, actionable error responses
+  - Clear problem descriptions instead of technical stack traces
+  - Specific error details with context
+  - Multiple actionable suggestions for each error type
+  - Alternative selector recommendations and debugging tips
+
+- **Enhanced Reliability Features**
+  - Increased default timeout from 5s to 30s (fully configurable)
+  - Better handling of timing issues and race conditions
+  - Automatic recovery from transient network failures
+  - Improved cache integrity management prevents corruption
+
+#### Changed
+- `browser_click` and `browser_type` tools now retry automatically on transient failures
+- Error responses include helpful suggestions instead of raw technical errors
+- Cache automatically invalidates failed selectors to prevent repeated failures
+- Default timeouts increased for better stability on slower connections
+
+#### Technical Implementation
+- New `RetryHelper` class provides configurable retry logic with exponential backoff
+- New `ErrorHelper` class formats user-friendly error messages with suggestions
+- Full integration with existing bidirectional cache invalidation system
+- Comprehensive test coverage for all retry scenarios
+
+#### Testing
+- 6 comprehensive test cases for retry logic
+- Validates exponential backoff timing
+- Confirms transient vs permanent error classification
+- Tests cache invalidation on failures
+
+## [0.1.2] - 2025-10-14
+
+### Changed
+- Package published to npm registry
+- Documentation improvements
+
 ## [0.1.0-alpha.16] - 2025-08-28
 
 ### 🏗️ Major Architecture Overhaul

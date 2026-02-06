@@ -52,6 +52,12 @@ export type { NormalizationResult, InputFeatures } from './core/smart-normalizer
 // Security Validation exports
 export { SecurityValidator } from './core/security-validator';
 
+// Retry and Error Handling exports
+export { RetryHelper } from './core/retry-helper';
+export type { RetryConfig } from './core/retry-helper';
+export { ErrorHelper } from './utils/error-helper';
+export type { ErrorContext, UserFriendlyError } from './utils/error-helper';
+
 // Automated Testing & Performance Validation Suite exports (Phase 4)
 export { PerformanceBenchmark } from './core/performance-monitor';
 export type { 

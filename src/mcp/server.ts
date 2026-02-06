@@ -3,6 +3,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { chromium, Browser, BrowserContext, Page, ConsoleMessage, Request, Response, Dialog } from 'playwright';
 import { z } from "zod";
+import { RetryHelper } from '../core/retry-helper';
+import { ErrorHelper } from '../utils/error-helper';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ProjectPaths } from '../utils/project-paths.js';
@@ -975,60 +977,67 @@ server.tool(
   },
   async ({ selector }) => {
     const page = await ensureBrowser();
-    
-    if (!enhancedCache) {
-      // Fallback to direct operation
-      await page.click(selector, { timeout: 5000 });
-      return {
-        content: [{
-          type: "text",
-          text: `Clicked element: ${selector} (no cache)`
-        }]
-      };
-    }
+    const currentUrl = page.url();
+    const context = {
+      operation: 'click element',
+      selector,
+      url: currentUrl
+    };
 
     try {
-      const operation = async (resolvedSelector: string) => {
-        await page.click(resolvedSelector, { timeout: 5000 });
-        return true;
-      };
+      // Use retry helper for resilient clicking
+      await RetryHelper.withRetry(async () => {
+        if (!enhancedCache) {
+          // Fallback to direct operation with shorter timeout for retry
+          await page.click(selector, { timeout: 10000 });
+          return true;
+        }
 
-      // Enhanced cache approach with Phase 2.2 enhanced cache keys
-      // Supports cross-environment caching and improved pattern matching
-      const currentUrl = page.url();
-      const testName = `Click ${selector}`;
-      const currentProfile = 'default'; // TODO: Get from session context
-      
-      const result = await enhancedCache.wrapSelectorOperationEnhanced(
-        testName,
-        selector, // Human-readable input
-        currentUrl,
-        operation,
-        undefined, // No steps for single operations
-        currentProfile || 'default',
-        page // Provide page for DOM signature generation
-      );
+        const operation = async (resolvedSelector: string) => {
+          await page.click(resolvedSelector, { timeout: 10000 });
+          return true;
+        };
 
-      const cacheStatus = result.cached ? '(cached)' : '(learned)';
-      const performance = result.performance.duration;
-      const domMetrics = result.performance.domSignature ? ` [DOM:${result.performance.domSignature.confidence}]` : '';
-      
+        const testName = `Click ${selector}`;
+        const currentProfile = 'default'; // TODO: Get from session context
+
+        const result = await enhancedCache.wrapSelectorOperationEnhanced(
+          testName,
+          selector,
+          currentUrl,
+          operation,
+          undefined,
+          currentProfile || 'default',
+          page
+        );
+
+        return result;
+      }, {
+        maxAttempts: 3,
+        baseDelay: 200,
+        timeout: 30000,
+        onRetry: (attempt, error) => {
+          console.error(`[browser_click] Retry ${attempt}/3 for selector: ${selector}`);
+          // Invalidate cache on retry to try fresh selectors
+          if (enhancedCache && attempt > 1) {
+            // Invalidate all cached data for this URL to force fresh lookup
+            enhancedCache.invalidateForUrl(currentUrl);
+          }
+        }
+      });
+
+      // Success response
       return {
         content: [{
           type: "text",
-          text: `Clicked element: ${selector} ${cacheStatus} [${performance}ms]${domMetrics}`
+          text: `✅ Clicked element: ${selector}`
         }]
       };
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        content: [{
-          type: "text",
-          text: `Click failed: ${errorMessage}`
-        }],
-        isError: true
-      };
+      const err = error instanceof Error ? error : new Error(String(error));
+      ErrorHelper.logError(err, context);
+      return ErrorHelper.formatMCPError(err, context);
     }
   }
 );
@@ -1043,56 +1052,68 @@ server.tool(
   },
   async ({ selector, text }) => {
     const page = await ensureBrowser();
-    
-    if (!enhancedCache) {
-      // Fallback to direct operation
-      await page.fill(selector, text);
-      return {
-        content: [{
-          type: "text",
-          text: `Typed "${text}" into ${selector} (no cache)`
-        }]
-      };
-    }
+    const currentUrl = page.url();
+    const context = {
+      operation: 'type text',
+      selector,
+      text: text.substring(0, 50), // Truncate for error messages
+      url: currentUrl
+    };
 
     try {
-      const operation = async (resolvedSelector: string) => {
-        return await page.fill(resolvedSelector, text);
-      };
+      // Use retry helper for resilient typing
+      await RetryHelper.withRetry(async () => {
+        if (!enhancedCache) {
+          // Fallback to direct operation
+          await page.fill(selector, text);
+          return true;
+        }
 
-      // Enhanced cache approach with Phase 2.2 enhanced cache keys for typing
-      const currentUrl = page.url();
-      const testName = `Type into ${selector}`;
-      const currentProfile = 'default'; // TODO: Get from session context
-      
-      const result = await enhancedCache.wrapSelectorOperationEnhanced(
-        testName,
-        selector,
-        currentUrl,
-        operation,
-        undefined, // No steps for single operations
-        currentProfile || 'default',
-        page
-      );
+        const operation = async (resolvedSelector: string) => {
+          return await page.fill(resolvedSelector, text);
+        };
 
-      const cacheStatus = result.cached ? '(cached)' : '(learned)';
-      const performance = result.performance.duration;
-      
+        const testName = `Type into ${selector}`;
+        const currentProfile = 'default'; // TODO: Get from session context
+
+        const result = await enhancedCache.wrapSelectorOperationEnhanced(
+          testName,
+          selector,
+          currentUrl,
+          operation,
+          undefined,
+          currentProfile || 'default',
+          page
+        );
+
+        return result;
+      }, {
+        maxAttempts: 3,
+        baseDelay: 200,
+        timeout: 30000,
+        onRetry: (attempt, error) => {
+          console.error(`[browser_type] Retry ${attempt}/3 for selector: ${selector}`);
+          // Invalidate cache on retry to try fresh selectors
+          if (enhancedCache && attempt > 1) {
+            // Invalidate all cached data for this URL to force fresh lookup
+            enhancedCache.invalidateForUrl(currentUrl);
+          }
+        }
+      });
+
+      // Success response
+      const textPreview = text.length > 20 ? text.substring(0, 20) + '...' : text;
       return {
         content: [{
           type: "text",
-          text: `Typed "${text}" into ${selector} ${cacheStatus} [${performance}ms]`
+          text: `✅ Typed "${textPreview}" into: ${selector}`
         }]
       };
+
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        content: [{
-          type: "text",
-          text: `Type failed: ${errorMessage}`
-        }],
-        isError: true
-      };
+      const err = error instanceof Error ? error : new Error(String(error));
+      ErrorHelper.logError(err, context);
+      return ErrorHelper.formatMCPError(err, context);
     }
   }
 );

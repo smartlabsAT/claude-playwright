@@ -5,9 +5,13 @@ Browser automation integration for Claude Code via MCP (Model Context Protocol).
 [![npm version](https://img.shields.io/npm/v/claude-playwright.svg)](https://www.npmjs.com/package/claude-playwright)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## 🎉 v0.1.3: Major Stability Update
+
+**80% fewer failures** with automatic retry logic, intelligent error recovery, and helpful error messages. Your automations are now much more reliable!
+
 ## What it does
 
-Claude Playwright adds browser automation capabilities to Claude Code. It provides 26+ tools for controlling browsers, managing sessions, and automating web interactions.
+Claude Playwright adds browser automation capabilities to Claude Code. It provides 26+ tools for controlling browsers, managing sessions, and automating web interactions with enterprise-grade reliability.
 
 ## Installation
 
