@@ -13,6 +13,7 @@ import { TestScenarioCache } from '../core/test-scenario-cache.js';
 import { TestPatternMatcher } from '../core/test-pattern-matcher.js';
 import { ProtocolValidationLayer } from '../core/protocol-validation-layer.js';
 import { SecurityValidator } from '../core/security-validator.js';
+import type { MCPToolResponse, TestStep, ErrorContext } from '../types/common.js';
 
 // __dirname is available in CommonJS mode
 
@@ -97,6 +98,21 @@ let dialogHandlers: DialogEntry[] = [];
 // BASE_URL injection - reads from environment or project config
 const BASE_URL = process.env.BASE_URL || process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
 console.error(`[Claude-Playwright MCP] Starting with BASE_URL: ${BASE_URL}`);
+
+// Configurable timeouts for different environments (CI/CD, Docker, etc.)
+const DEFAULT_TIMEOUTS = {
+  navigation: parseInt(process.env.PLAYWRIGHT_NAVIGATION_TIMEOUT || '30000', 10),  // 30s default
+  action: parseInt(process.env.PLAYWRIGHT_ACTION_TIMEOUT || '15000', 10),         // 15s default
+  selector: parseInt(process.env.PLAYWRIGHT_SELECTOR_TIMEOUT || '10000', 10),     // 10s default
+  browserLaunch: parseInt(process.env.PLAYWRIGHT_BROWSER_TIMEOUT || '30000', 10), // 30s default
+};
+
+console.error(`[Claude-Playwright MCP] Timeouts configured:`, {
+  navigation: `${DEFAULT_TIMEOUTS.navigation}ms`,
+  action: `${DEFAULT_TIMEOUTS.action}ms`,
+  selector: `${DEFAULT_TIMEOUTS.selector}ms`,
+  browserLaunch: `${DEFAULT_TIMEOUTS.browserLaunch}ms`
+});
 
 // Session management
 const SESSIONS_DIR = ProjectPaths.getSessionsDir();
@@ -273,7 +289,7 @@ function cleanupPageListeners(page: Page): void {
   const listeners = pageListeners.get(page);
   if (listeners) {
     for (const {event, handler} of listeners) {
-      page.off(event as any, handler as any);
+      page.off(event as any, handler as any); // Event types are dynamic, cast is acceptable
     }
     pageListeners.delete(page);
     console.error('[Claude-Playwright MCP] Page listeners cleaned up');
@@ -291,7 +307,7 @@ async function ensureBrowser(sessionName: string | null = null): Promise<Page> {
       browser = await chromium.launch({
         headless: false,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        timeout: 30000 // 30 second timeout
+        timeout: DEFAULT_TIMEOUTS.browserLaunch
       });
     } catch (error) {
       console.error('[Browser] Launch failed, retrying with fallback options...', error);
@@ -301,7 +317,7 @@ async function ensureBrowser(sessionName: string | null = null): Promise<Page> {
         browser = await chromium.launch({
           headless: true, // Fallback to headless
           args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-          timeout: 30000
+          timeout: DEFAULT_TIMEOUTS.browserLaunch
         });
         console.error('[Browser] Launched in headless mode (fallback)');
       } catch (fallbackError) {
@@ -310,7 +326,7 @@ async function ensureBrowser(sessionName: string | null = null): Promise<Page> {
           browser = await chromium.launch({
             headless: true,
             args: ['--no-sandbox'],
-            timeout: 45000 // Give more time for constrained environments
+            timeout: Math.max(DEFAULT_TIMEOUTS.browserLaunch * 1.5, 45000) // Give more time for constrained environments
           });
           console.error('[Browser] Launched with minimal options (final fallback)');
         } catch (finalError) {
@@ -360,6 +376,10 @@ async function ensureBrowser(sessionName: string | null = null): Promise<Page> {
       acceptDownloads: true,
       ignoreHTTPSErrors: true
     });
+
+    // Set context-level default timeouts
+    context.setDefaultNavigationTimeout(DEFAULT_TIMEOUTS.navigation);
+    context.setDefaultTimeout(DEFAULT_TIMEOUTS.action);
     
     page = await context.newPage();
     setupPageListeners(page);
@@ -447,11 +467,11 @@ async function withBrowserRecovery<T>(
 }
 
 // Protocol-validated tool wrapper
-async function executeValidatedTool<T extends Record<string, any>>(
-  toolName: string, 
-  params: T, 
-  implementation: (validatedParams: T) => Promise<any>
-): Promise<any> {
+async function executeValidatedTool<T extends Record<string, unknown>>(
+  toolName: string,
+  params: T,
+  implementation: (validatedParams: T) => Promise<MCPToolResponse>
+): Promise<MCPToolResponse> {
   try {
     // Validate tool call through protocol layer
     if (protocolValidation) {
@@ -1070,9 +1090,9 @@ server.tool(
     console.error(`[Claude-Playwright MCP] Navigating to: ${targetUrl}`);
     
     try {
-      await page.goto(targetUrl, { 
+      await page.goto(targetUrl, {
         waitUntil: 'domcontentloaded',
-        timeout: 30000 
+        timeout: DEFAULT_TIMEOUTS.navigation
       });
       const title = await page.title();
       const currentUrl = page.url();
@@ -1125,13 +1145,13 @@ server.tool(
       // Use retry helper for resilient clicking
       await RetryHelper.withRetry(async () => {
         if (!enhancedCache) {
-          // Fallback to direct operation with shorter timeout for retry
-          await page.click(selector, { timeout: 10000 });
+          // Fallback to direct operation with configurable timeout
+          await page.click(selector, { timeout: DEFAULT_TIMEOUTS.action });
           return true;
         }
 
         const operation = async (resolvedSelector: string) => {
-          await page.click(resolvedSelector, { timeout: 10000 });
+          await page.click(resolvedSelector, { timeout: DEFAULT_TIMEOUTS.action });
           return true;
         };
 
@@ -1152,7 +1172,7 @@ server.tool(
       }, {
         maxAttempts: 3,
         baseDelay: 200,
-        timeout: 30000,
+        timeout: DEFAULT_TIMEOUTS.action * 2, // Allow retry attempts within timeout
         onRetry: (attempt, error) => {
           console.error(`[browser_click] Retry ${attempt}/3 for selector: ${selector}`);
           // Invalidate cache on retry to try fresh selectors
@@ -1229,7 +1249,7 @@ server.tool(
       }, {
         maxAttempts: 3,
         baseDelay: 200,
-        timeout: 30000,
+        timeout: DEFAULT_TIMEOUTS.action * 2, // Allow retry attempts within timeout
         onRetry: (attempt, error) => {
           console.error(`[browser_type] Retry ${attempt}/3 for selector: ${selector}`);
           // Invalidate cache on retry to try fresh selectors

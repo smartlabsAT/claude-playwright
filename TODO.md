@@ -34,13 +34,15 @@ Diese Fixes verhindern komplette Ausfälle:
   - ✅ Integrity checks beim Start
   - ✅ Alle Schreiboperationen in Transactions
 
-### Phase 3: Netzwerk & TypeScript (Tag 3)
+### Phase 3: Netzwerk & TypeScript (In Arbeit)
 Verbesserungen für Zuverlässigkeit:
 
-- [ ] **FIX #4: Network Timeouts** (1 Stunde)
+- [x] **FIX #4: Network Timeouts** (1 Stunde) - Commit: pending
   - Environment Variables für Timeouts
   - Macht Tool in CI/CD nutzbar
   - File: `src/mcp/server.ts:938-1014`
+  - ✅ 4 configurable timeouts via ENV vars
+  - ✅ Full documentation in ENVIRONMENT_VARIABLES.md
 
 - [ ] **FIX #6-8: TypeScript Safety** (2 Stunden)
   - Alle `any` Types ersetzen
@@ -51,8 +53,10 @@ Verbesserungen für Zuverlässigkeit:
 
 ## 📊 Status Tracking
 
-**Current Branch:** `fix/issue-30-phase-2-critical-stability`
-**Previous Branch:** `fix/issue-30-stability-improvements` (✅ Merged in PR #31)
+**Current Branch:** `fix/issue-30-phase-3-network-typescript`
+**Previous Branches:**
+- `fix/issue-30-stability-improvements` (✅ Merged in PR #31)
+- `fix/issue-30-phase-2-critical-stability` (✅ Merged in PR #32)
 **Issue:** #30
 **Target:** v0.1.4
 **Started:** 2026-02-06
