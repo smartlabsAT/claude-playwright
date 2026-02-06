@@ -1,6 +1,7 @@
 import { BidirectionalCache } from './bidirectional-cache.js';
 import { SmartNormalizer } from './smart-normalizer.js';
 import crypto from 'crypto';
+import { safeJSONParse } from '../utils/safe-json.js';
 
 export interface TestStep {
   action: 'navigate' | 'click' | 'type' | 'wait' | 'assert' | 'screenshot';
@@ -311,7 +312,7 @@ export class TestScenarioCache extends BidirectionalCache {
           const scenario: TestScenario = {
             name: scenarioEntry.name,
             description: scenarioEntry.description,
-            steps: JSON.parse(scenarioEntry.steps_json),
+            steps: safeJSONParse(scenarioEntry.steps_json, [], 'test scenario steps'),
             tags: scenarioEntry.tags ? scenarioEntry.tags.split(',') : undefined,
             urlPattern: scenarioEntry.url_pattern,
             profile: scenarioEntry.profile || undefined
@@ -409,7 +410,7 @@ export class TestScenarioCache extends BidirectionalCache {
         const scenario: TestScenario = {
           name: result.name,
           description: result.description,
-          steps: JSON.parse(result.steps_json),
+          steps: safeJSONParse(result.steps_json, [], 'test scenario steps'),
           tags: result.tags ? result.tags.split(',') : undefined,
           urlPattern: result.url_pattern,
           profile: result.profile || undefined
@@ -786,7 +787,7 @@ export class TestScenarioCache extends BidirectionalCache {
         const scenarios: TestScenario[] = results.map(entry => ({
           name: entry.name,
           description: entry.description,
-          steps: JSON.parse(entry.steps_json),
+          steps: safeJSONParse(entry.steps_json, [], 'test scenario steps'),
           tags: entry.tags ? entry.tags.split(',') : undefined,
           urlPattern: entry.url_pattern,
           profile: entry.profile || undefined

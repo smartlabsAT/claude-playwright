@@ -164,11 +164,11 @@ export class IntelligentTestRecognition {
         }
       }
 
-      if (bestMatch.similarity > 0.6) {
+      if (bestMatch.similarity > 0.6 && bestMatch.scenario) {
         return {
           recognized: true,
           confidence: bestMatch.similarity,
-          suggestion: `Your current actions match "${bestMatch.scenario!.name}" test (${(bestMatch.similarity * 100).toFixed(1)}% similarity). Would you like to save this as a variant or continue the existing pattern?`
+          suggestion: `Your current actions match "${bestMatch.scenario.name}" test (${(bestMatch.similarity * 100).toFixed(1)}% similarity). Would you like to save this as a variant or continue the existing pattern?`
         };
       }
 
