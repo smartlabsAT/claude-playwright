@@ -7,6 +7,8 @@ import crypto from 'crypto';
 import * as path from 'path';
 import { ProjectPaths } from '../utils/project-paths.js';
 import * as fs from 'fs';
+import type { Page } from 'playwright';
+import type { CacheStats, SnapshotData, SnapshotMetrics, DOMSignatureMetrics } from '../types/common.js';
 
 interface SelectorCacheEntry {
   id?: number;
@@ -453,7 +455,7 @@ export class BidirectionalCache {
     selector: string, 
     steps?: TestStep[],
     profile: string = 'default',
-    page?: any
+    page?: Page
   ): Promise<void> {
     const now = Date.now();
     
@@ -542,7 +544,7 @@ export class BidirectionalCache {
     url: string,
     steps?: TestStep[],
     profile: string = 'default',
-    page?: any
+    page?: Page
   ): Promise<LookupResult | null> {
     try {
       // Generate DOM signature if page is available
@@ -1142,7 +1144,7 @@ export class BidirectionalCache {
     }, 'cleanup old entries');
   }
 
-  async getStats(): Promise<any> {
+  async getStats(): Promise<CacheStats> {
     try {
       const dbStats = this.db.prepare(`
         SELECT 
@@ -1241,7 +1243,7 @@ export class BidirectionalCache {
   }
 
   // Snapshot cache methods
-  async getSnapshot(key: object, profile?: string, options: { page?: any; url?: string; domSignatureFallback?: boolean } = {}): Promise<any | null> {
+  async getSnapshot(key: object, profile?: string, options: { page?: Page; url?: string; domSignatureFallback?: boolean } = {}): Promise<SnapshotData | null> {
     try {
       const cacheKey = this.createCacheKey(key);
       const now = Date.now();
@@ -1332,7 +1334,7 @@ export class BidirectionalCache {
     return null;
   }
 
-  async setSnapshot(key: object, value: any, options: { url?: string; profile?: string; ttl?: number; page?: any } = {}): Promise<void> {
+  async setSnapshot(key: object, value: SnapshotData, options: { url?: string; profile?: string; ttl?: number; page?: Page } = {}): Promise<void> {
     const cacheKey = this.createCacheKey(key);
     const now = Date.now();
     const ttl = options.ttl ?? this.options.snapshotTTL;
@@ -1411,7 +1413,7 @@ export class BidirectionalCache {
     }, 'invalidate snapshots');
   }
 
-  async getSnapshotMetrics(): Promise<any> {
+  async getSnapshotMetrics(): Promise<SnapshotMetrics> {
     try {
       const stats = this.db.prepare(`
         SELECT 
@@ -1460,7 +1462,7 @@ export class BidirectionalCache {
     input: string, 
     url: string, 
     selector: string, 
-    page?: any, 
+    page?: Page, 
     options: { confidence?: number } = {}
   ): Promise<void> {
     const now = Date.now();
@@ -1529,7 +1531,7 @@ export class BidirectionalCache {
   async getWithDOMSignatureFallback(
     input: string, 
     url: string,
-    page?: any,
+    page?: Page,
     options: { similarityThreshold?: number } = {}
   ): Promise<LookupResult | null> {
     const threshold = options.similarityThreshold ?? 0.15;
@@ -1626,7 +1628,7 @@ export class BidirectionalCache {
   /**
    * Get DOM signature statistics and health metrics
    */
-  async getDOMSignatureMetrics(): Promise<any> {
+  async getDOMSignatureMetrics(): Promise<DOMSignatureMetrics> {
     try {
       const selectorStats = this.db.prepare(`
         SELECT 

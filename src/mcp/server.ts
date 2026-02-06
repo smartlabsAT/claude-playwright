@@ -13,6 +13,7 @@ import { TestScenarioCache } from '../core/test-scenario-cache.js';
 import { TestPatternMatcher } from '../core/test-pattern-matcher.js';
 import { ProtocolValidationLayer } from '../core/protocol-validation-layer.js';
 import { SecurityValidator } from '../core/security-validator.js';
+import type { MCPToolResponse, TestStep, ErrorContext } from '../types/common.js';
 
 // __dirname is available in CommonJS mode
 
@@ -288,7 +289,7 @@ function cleanupPageListeners(page: Page): void {
   const listeners = pageListeners.get(page);
   if (listeners) {
     for (const {event, handler} of listeners) {
-      page.off(event as any, handler as any);
+      page.off(event as any, handler as any); // Event types are dynamic, cast is acceptable
     }
     pageListeners.delete(page);
     console.error('[Claude-Playwright MCP] Page listeners cleaned up');
@@ -466,11 +467,11 @@ async function withBrowserRecovery<T>(
 }
 
 // Protocol-validated tool wrapper
-async function executeValidatedTool<T extends Record<string, any>>(
-  toolName: string, 
-  params: T, 
-  implementation: (validatedParams: T) => Promise<any>
-): Promise<any> {
+async function executeValidatedTool<T extends Record<string, unknown>>(
+  toolName: string,
+  params: T,
+  implementation: (validatedParams: T) => Promise<MCPToolResponse>
+): Promise<MCPToolResponse> {
   try {
     // Validate tool call through protocol layer
     if (protocolValidation) {

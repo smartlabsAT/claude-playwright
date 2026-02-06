@@ -1,6 +1,7 @@
 import { Page } from 'playwright';
 import { BidirectionalCache } from './bidirectional-cache.js';
 import { TieredCache } from './tiered-cache.js';
+import type { PerformanceMetrics, SnapshotData, CacheStats, TestStep } from '../types/common.js';
 
 export class EnhancedCacheIntegration {
   private static instance: EnhancedCacheIntegration | null = null;
