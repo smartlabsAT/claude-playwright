@@ -2000,16 +2000,38 @@ ${stats.totalMessages === 0 ? '• No messages processed yet - validation system
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.error('[Claude-Playwright MCP] Shutting down...');
-  if (context) await context.close();
-  if (browser) await browser.close();
-  process.exit(0);
+  try {
+    // Close cache first to stop all timers
+    if (enhancedCache) {
+      enhancedCache.close();
+    }
+    // Close page and context
+    if (page) await page.close();
+    if (context) await context.close();
+    if (browser) await browser.close();
+  } catch (error) {
+    console.error('[Shutdown] Error during cleanup:', error);
+  } finally {
+    process.exit(0);
+  }
 });
 
 process.on('SIGTERM', async () => {
   console.error('[Claude-Playwright MCP] Terminating...');
-  if (context) await context.close();
-  if (browser) await browser.close();
-  process.exit(0);
+  try {
+    // Close cache first to stop all timers
+    if (enhancedCache) {
+      enhancedCache.close();
+    }
+    // Close page and context
+    if (page) await page.close();
+    if (context) await context.close();
+    if (browser) await browser.close();
+  } catch (error) {
+    console.error('[Shutdown] Error during cleanup:', error);
+  } finally {
+    process.exit(0);
+  }
 });
 
 // Start server

@@ -1777,10 +1777,22 @@ export class BidirectionalCache {
   }
 
   close(): void {
+    // Clear interval timer first and set to undefined
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
     }
+
+    // Close DOM signature manager if exists
     this.domSignatureManager?.close();
-    this.db.close();
+
+    // Ensure database closes even if error
+    try {
+      this.db.close();
+    } catch (error) {
+      console.error('[Cache] Error closing database:', error);
+    }
+
+    console.error('[Cache] Closed successfully');
   }
 }
