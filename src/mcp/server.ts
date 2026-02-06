@@ -156,10 +156,15 @@ async function saveSession(sessionName: string): Promise<boolean> {
   }
 }
 
+// Track listeners for cleanup
+const pageListeners = new WeakMap<Page, Array<{event: string, handler: Function}>>();
+
 // Setup page event listeners
 function setupPageListeners(page: Page): void {
+  const listeners: Array<{event: string, handler: Function}> = [];
+
   // Console logging
-  page.on('console', (msg: ConsoleMessage) => {
+  const consoleHandler = (msg: ConsoleMessage) => {
     const entry: ConsoleMessageEntry = {
       type: msg.type(),
       text: msg.text(),
@@ -167,20 +172,20 @@ function setupPageListeners(page: Page): void {
       timestamp: new Date().toISOString()
     };
     consoleMessages.push(entry);
-    
+
     // Keep only last 100 messages
     if (consoleMessages.length > 100) {
       consoleMessages.shift();
     }
-    
+
     // Log errors to stderr
     if (msg.type() === 'error') {
       console.error(`[Browser Console Error] ${msg.text()}`);
     }
-  });
-  
-  // Network monitoring
-  page.on('request', (request: Request) => {
+  };
+
+  // Network monitoring - request
+  const requestHandler = (request: Request) => {
     const entry: NetworkRequestEntry = {
       url: request.url(),
       method: request.method(),
@@ -190,14 +195,15 @@ function setupPageListeners(page: Page): void {
       type: 'request'
     };
     networkRequests.push(entry);
-    
+
     // Keep only last 100 requests
     if (networkRequests.length > 100) {
       networkRequests.shift();
     }
-  });
-  
-  page.on('response', (response: Response) => {
+  };
+
+  // Network monitoring - response
+  const responseHandler = (response: Response) => {
     const entry: NetworkRequestEntry = {
       url: response.url(),
       status: response.status(),
@@ -207,12 +213,12 @@ function setupPageListeners(page: Page): void {
       type: 'response'
     };
     networkRequests.push(entry);
-  });
-  
+  };
+
   // Dialog handling
-  page.on('dialog', async (dialog: Dialog) => {
+  const dialogHandler = async (dialog: Dialog) => {
     console.error(`[Dialog] ${dialog.type()}: ${dialog.message()}`);
-    
+
     // Auto-accept dialogs by default
     if (dialog.type() === 'alert') {
       await dialog.accept();
@@ -221,7 +227,7 @@ function setupPageListeners(page: Page): void {
     } else if (dialog.type() === 'prompt') {
       await dialog.accept(''); // Can provide default value
     }
-    
+
     const entry: DialogEntry = {
       type: dialog.type(),
       message: dialog.message(),
@@ -229,10 +235,10 @@ function setupPageListeners(page: Page): void {
       timestamp: new Date().toISOString()
     };
     dialogHandlers.push(entry);
-  });
-  
+  };
+
   // Page errors
-  page.on('pageerror', (error: Error) => {
+  const pageErrorHandler = (error: Error) => {
     console.error(`[Page Error] ${error.message}`);
     const entry: ConsoleMessageEntry = {
       type: 'pageerror',
@@ -241,7 +247,37 @@ function setupPageListeners(page: Page): void {
       timestamp: new Date().toISOString()
     };
     consoleMessages.push(entry);
-  });
+  };
+
+  // Register all handlers
+  page.on('console', consoleHandler);
+  page.on('request', requestHandler);
+  page.on('response', responseHandler);
+  page.on('dialog', dialogHandler);
+  page.on('pageerror', pageErrorHandler);
+
+  // Store handlers for cleanup
+  listeners.push(
+    {event: 'console', handler: consoleHandler},
+    {event: 'request', handler: requestHandler},
+    {event: 'response', handler: responseHandler},
+    {event: 'dialog', handler: dialogHandler},
+    {event: 'pageerror', handler: pageErrorHandler}
+  );
+
+  pageListeners.set(page, listeners);
+}
+
+// Cleanup page event listeners
+function cleanupPageListeners(page: Page): void {
+  const listeners = pageListeners.get(page);
+  if (listeners) {
+    for (const {event, handler} of listeners) {
+      page.off(event as any, handler as any);
+    }
+    pageListeners.delete(page);
+    console.error('[Claude-Playwright MCP] Page listeners cleaned up');
+  }
 }
 
 // Initialize browser with optional session
@@ -677,7 +713,10 @@ server.tool(
       // Optimize: Only close context, keep browser instance alive
       if (browser && context) {
         console.error(`[Claude-Playwright MCP] Switching to session: ${sessionName} (keeping browser alive)...`);
-        if (page) await page.close();
+        if (page) {
+          cleanupPageListeners(page);
+          await page.close();
+        }
         if (context) await context.close();
         context = null;
         page = null;
@@ -1345,7 +1384,10 @@ server.tool(
   {},
   async () => {
     try {
-      if (page) await page.close();
+      if (page) {
+        cleanupPageListeners(page);
+        await page.close();
+      }
       if (context) await context.close();
       if (browser) await browser.close();
       
@@ -2006,7 +2048,10 @@ process.on('SIGINT', async () => {
       enhancedCache.close();
     }
     // Close page and context
-    if (page) await page.close();
+    if (page) {
+      cleanupPageListeners(page);
+      await page.close();
+    }
     if (context) await context.close();
     if (browser) await browser.close();
   } catch (error) {
@@ -2024,7 +2069,10 @@ process.on('SIGTERM', async () => {
       enhancedCache.close();
     }
     // Close page and context
-    if (page) await page.close();
+    if (page) {
+      cleanupPageListeners(page);
+      await page.close();
+    }
     if (context) await context.close();
     if (browser) await browser.close();
   } catch (error) {
