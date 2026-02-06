@@ -285,9 +285,56 @@ async function ensureBrowser(sessionName: string | null = null): Promise<Page> {
   // Launch browser if not exists
   if (!browser) {
     console.error('[Claude-Playwright MCP] Launching browser...');
-    browser = await chromium.launch({ 
-      headless: false,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+
+    try {
+      // Try launching with preferred settings
+      browser = await chromium.launch({
+        headless: false,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        timeout: 30000 // 30 second timeout
+      });
+    } catch (error) {
+      console.error('[Browser] Launch failed, retrying with fallback options...', error);
+
+      try {
+        // Retry with headless mode as fallback
+        browser = await chromium.launch({
+          headless: true, // Fallback to headless
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+          timeout: 30000
+        });
+        console.error('[Browser] Launched in headless mode (fallback)');
+      } catch (fallbackError) {
+        // Final attempt with minimal options
+        try {
+          browser = await chromium.launch({
+            headless: true,
+            args: ['--no-sandbox'],
+            timeout: 45000 // Give more time for constrained environments
+          });
+          console.error('[Browser] Launched with minimal options (final fallback)');
+        } catch (finalError) {
+          const errorMessage = finalError instanceof Error ? finalError.message : String(finalError);
+          throw new Error(
+            `Browser initialization failed after 3 attempts. ${errorMessage}\n` +
+            `Troubleshooting:\n` +
+            `1. Install browser dependencies: npx playwright install-deps chromium\n` +
+            `2. Check system resources (RAM/CPU)\n` +
+            `3. Try running with: PLAYWRIGHT_BROWSERS_PATH=0 npm start\n` +
+            `4. For Docker/CI: Ensure --no-sandbox is allowed\n` +
+            `5. Restart Claude Code and try again`
+          );
+        }
+      }
+    }
+
+    // Add crash handler for browser disconnection
+    browser.on('disconnected', () => {
+      console.error('[Browser] Browser disconnected unexpectedly, cleaning up...');
+      browser = null;
+      context = null;
+      page = null;
+      // Don't exit process, allow reconnection on next operation
     });
   }
   
@@ -342,7 +389,11 @@ async function ensureBrowser(sessionName: string | null = null): Promise<Page> {
     console.error(`[Claude-Playwright MCP] Context ready${sessionName ? ` with session: ${sessionName}` : ''}`);
   }
   
-  return page!;
+  if (!page) {
+    throw new Error('Failed to create browser page. Browser might have crashed during initialization.');
+  }
+
+  return page;
 }
 
 // Clear collected data
@@ -350,6 +401,49 @@ function clearCollectedData(): void {
   consoleMessages = [];
   networkRequests = [];
   dialogHandlers = [];
+}
+
+// Wrapper to ensure browser operations can recover from crashes
+async function withBrowserRecovery<T>(
+  operation: string,
+  fn: () => Promise<T>,
+  maxRetries: number = 2
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Check if it's a browser-related error that might be recoverable
+      const errorMessage = lastError.message.toLowerCase();
+      const isBrowserError =
+        errorMessage.includes('browser') ||
+        errorMessage.includes('page') ||
+        errorMessage.includes('context') ||
+        errorMessage.includes('target closed') ||
+        errorMessage.includes('connection closed');
+
+      if (isBrowserError && attempt < maxRetries) {
+        console.error(`[Browser Recovery] ${operation} failed (attempt ${attempt}/${maxRetries}), resetting browser...`, lastError.message);
+
+        // Reset browser state to force reconnection
+        browser = null;
+        context = null;
+        page = null;
+
+        // Small delay before retry
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
+      }
+
+      throw lastError;
+    }
+  }
+
+  throw lastError || new Error(`${operation} failed after ${maxRetries} attempts`);
 }
 
 // Protocol-validated tool wrapper
@@ -952,10 +1046,12 @@ server.tool(
     url: SecurityValidator.URLSchema.or(z.string().min(1).describe("Relative path"))
   },
   async ({ url }) => {
-    const page = await ensureBrowser();
-    
-    // Clear previous page data
-    clearCollectedData();
+    // Use recovery wrapper for navigation
+    return await withBrowserRecovery('navigate', async () => {
+      const page = await ensureBrowser();
+
+      // Clear previous page data
+      clearCollectedData();
     
     // URL rewriting logic - Smart URL correction
     let targetUrl = url;
@@ -1004,6 +1100,7 @@ server.tool(
         isError: true
       };
     }
+    });  // End of withBrowserRecovery wrapper
   }
 );
 
@@ -1015,8 +1112,9 @@ server.tool(
     selector: SecurityValidator.SelectorSchema
   },
   async ({ selector }) => {
-    const page = await ensureBrowser();
-    const currentUrl = page.url();
+    return await withBrowserRecovery('click', async () => {
+      const page = await ensureBrowser();
+      const currentUrl = page.url();
     const context = {
       operation: 'click element',
       selector,
@@ -1078,6 +1176,7 @@ server.tool(
       ErrorHelper.logError(err, context);
       return ErrorHelper.formatMCPError(err, context);
     }
+    }); // End of withBrowserRecovery wrapper
   }
 );
 
@@ -1090,8 +1189,9 @@ server.tool(
     text: SecurityValidator.TextInputSchema
   },
   async ({ selector, text }) => {
-    const page = await ensureBrowser();
-    const currentUrl = page.url();
+    return await withBrowserRecovery('type', async () => {
+      const page = await ensureBrowser();
+      const currentUrl = page.url();
     const context = {
       operation: 'type text',
       selector,
@@ -1154,6 +1254,7 @@ server.tool(
       ErrorHelper.logError(err, context);
       return ErrorHelper.formatMCPError(err, context);
     }
+    }); // End of withBrowserRecovery wrapper
   }
 );
 
