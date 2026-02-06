@@ -9,6 +9,7 @@ import { ProjectPaths } from '../utils/project-paths.js';
 import * as fs from 'fs';
 import type { Page } from 'playwright';
 import type { CacheStats, SnapshotData, SnapshotMetrics, DOMSignatureMetrics } from '../types/common.js';
+import { safeJSONParse } from '../utils/safe-json.js';
 
 interface SelectorCacheEntry {
   id?: number;
@@ -837,7 +838,7 @@ export class BidirectionalCache {
 
       for (const candidate of candidates) {
         try {
-          const candidateTokens = JSON.parse(candidate.input_tokens);
+          const candidateTokens = safeJSONParse(candidate.input_tokens, [], 'input_tokens');
           // Use context-aware similarity for better matching
           const similarity = this.calculateContextAwareSimilarity(
             normalizedResult.tokens,
@@ -1160,7 +1161,16 @@ export class BidirectionalCache {
       const hitRate = Object.values(this.stats.hits).reduce((a, b) => a + b, 0) / 
                      (Object.values(this.stats.hits).reduce((a, b) => a + b, 0) + this.stats.misses);
 
-      const snapshotStats = await this.getSnapshotMetrics();
+      // Get raw snapshot statistics for CacheStats
+      const snapshotRawStats = this.db.prepare(`
+        SELECT
+          COUNT(*) as total_snapshots,
+          SUM(hit_count) as total_hits,
+          AVG(hit_count) as avg_hits_per_snapshot,
+          COUNT(DISTINCT url) as unique_urls,
+          COUNT(DISTINCT profile) as unique_profiles
+        FROM snapshot_cache
+      `).get() as any;
 
       return {
         performance: {
@@ -1169,8 +1179,20 @@ export class BidirectionalCache {
           misses: this.stats.misses,
           totalLookups: Object.values(this.stats.hits).reduce((a, b) => a + b, 0) + this.stats.misses
         },
-        storage: dbStats,
-        snapshots: snapshotStats,
+        storage: dbStats as {
+          unique_selectors: number;
+          total_mappings: number;
+          avg_success_count: number;
+          avg_inputs_per_selector: number;
+          learning_rate: number;
+        },
+        snapshots: {
+          total_snapshots: snapshotRawStats?.total_snapshots || 0,
+          total_hits: snapshotRawStats?.total_hits || 0,
+          avg_hits_per_snapshot: snapshotRawStats?.avg_hits_per_snapshot || 0,
+          unique_urls: snapshotRawStats?.unique_urls || 0,
+          unique_profiles: snapshotRawStats?.unique_profiles || 0
+        },
         operations: {
           sets: this.stats.sets,
           learnings: this.stats.learnings
@@ -1178,7 +1200,39 @@ export class BidirectionalCache {
       };
     } catch (error) {
       console.error('[BidirectionalCache] Get stats error:', error);
-      return {};
+      // Return a valid CacheStats object with default values
+      return {
+        performance: {
+          hitRate: 0,
+          hits: {
+            exact: 0,
+            normalized: 0,
+            reverse: 0,
+            fuzzy: 0,
+            enhanced: 0
+          },
+          misses: 0,
+          totalLookups: 0
+        },
+        storage: {
+          unique_selectors: 0,
+          total_mappings: 0,
+          avg_success_count: 0,
+          avg_inputs_per_selector: 0,
+          learning_rate: 0
+        },
+        snapshots: {
+          total_snapshots: 0,
+          total_hits: 0,
+          avg_hits_per_snapshot: 0,
+          unique_urls: 0,
+          unique_profiles: 0
+        },
+        operations: {
+          sets: 0,
+          learnings: 0
+        }
+      };
     }
   }
 
@@ -1326,7 +1380,7 @@ export class BidirectionalCache {
         `);
         updateStmt.run(now, result.cache_key || cacheKey, profile || null, profile || null);
         
-        return JSON.parse(result.snapshot_data);
+        return safeJSONParse(result.snapshot_data, null, 'snapshot_data');
       }
     } catch (error) {
       console.error('[BidirectionalCache] Get snapshot error:', error);
@@ -1416,21 +1470,55 @@ export class BidirectionalCache {
   async getSnapshotMetrics(): Promise<SnapshotMetrics> {
     try {
       const stats = this.db.prepare(`
-        SELECT 
-          COUNT(*) as total_snapshots,
-          SUM(hit_count) as total_hits,
-          AVG(hit_count) as avg_hits_per_snapshot,
+        SELECT
+          COUNT(*) as total,
           COUNT(DISTINCT url) as unique_urls,
           COUNT(DISTINCT profile) as unique_profiles,
-          MIN(created_at) as oldest_snapshot,
-          MAX(last_used) as most_recent_access
+          AVG(hit_count) as avg_hit_rate
         FROM snapshot_cache
-      `).get();
-      
-      return stats || {};
+      `).get() as any;
+
+      // Get by profile breakdown
+      const profileStats = this.db.prepare(`
+        SELECT profile, COUNT(*) as count
+        FROM snapshot_cache
+        WHERE profile IS NOT NULL
+        GROUP BY profile
+      `).all() as Array<{ profile: string; count: number }>;
+
+      // Get by URL breakdown
+      const urlStats = this.db.prepare(`
+        SELECT url, COUNT(*) as count
+        FROM snapshot_cache
+        GROUP BY url
+        LIMIT 10
+      `).all() as Array<{ url: string; count: number }>;
+
+      const byProfile: Record<string, number> = {};
+      profileStats.forEach(row => {
+        byProfile[row.profile] = row.count;
+      });
+
+      const byUrl: Record<string, number> = {};
+      urlStats.forEach(row => {
+        byUrl[row.url] = row.count;
+      });
+
+      return {
+        total: stats?.total || 0,
+        byProfile,
+        byUrl,
+        avgHitRate: stats?.avg_hit_rate || 0
+      };
     } catch (error) {
       console.error('[BidirectionalCache] Get snapshot metrics error:', error);
-      return {};
+      // Return a valid SnapshotMetrics object with default values
+      return {
+        total: 0,
+        byProfile: {},
+        byUrl: {},
+        avgHitRate: 0
+      };
     }
   }
 
@@ -1630,39 +1718,48 @@ export class BidirectionalCache {
    */
   async getDOMSignatureMetrics(): Promise<DOMSignatureMetrics> {
     try {
-      const selectorStats = this.db.prepare(`
-        SELECT 
-          COUNT(*) as total_selectors,
-          COUNT(CASE WHEN dom_signature IS NOT NULL THEN 1 END) as selectors_with_dom_signature,
-          COUNT(DISTINCT dom_signature) as unique_dom_signatures
-        FROM selector_cache_v2
-      `).get();
-
-      const snapshotStats = this.db.prepare(`
-        SELECT 
-          COUNT(*) as total_snapshots,
-          COUNT(CASE WHEN dom_signature IS NOT NULL THEN 1 END) as snapshots_with_dom_signature,
-          COUNT(DISTINCT dom_signature) as unique_snapshot_signatures,
-          COUNT(DISTINCT critical_hash) as unique_critical_hashes,
-          COUNT(DISTINCT important_hash) as unique_important_hashes,
-          COUNT(DISTINCT context_hash) as unique_context_hashes
+      const signatureStats = this.db.prepare(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(CASE WHEN critical_hash IS NOT NULL THEN 1 END) as critical,
+          COUNT(CASE WHEN important_hash IS NOT NULL THEN 1 END) as important,
+          COUNT(CASE WHEN context_hash IS NOT NULL THEN 1 END) as context
         FROM snapshot_cache
-      `).get();
+      `).get() as any;
 
-      const domSignatureCacheStats = this.domSignatureManager.getCacheStats();
+      const elementCounts = this.db.prepare(`
+        SELECT
+          AVG(CASE WHEN critical_hash IS NOT NULL THEN 1 ELSE 0 END) as avg_critical,
+          AVG(CASE WHEN important_hash IS NOT NULL THEN 1 ELSE 0 END) as avg_important,
+          AVG(CASE WHEN context_hash IS NOT NULL THEN 1 ELSE 0 END) as avg_context
+        FROM snapshot_cache
+      `).get() as any;
 
       return {
-        selector_cache: selectorStats || {},
-        snapshot_cache: snapshotStats || {},
-        dom_signature_manager: domSignatureCacheStats,
-        coverage: {
-          selector_coverage: (selectorStats as any)?.selectors_with_dom_signature / Math.max((selectorStats as any)?.total_selectors || 1, 1),
-          snapshot_coverage: (snapshotStats as any)?.snapshots_with_dom_signature / Math.max((snapshotStats as any)?.total_snapshots || 1, 1)
+        total: signatureStats?.total || 0,
+        critical: signatureStats?.critical || 0,
+        important: signatureStats?.important || 0,
+        context: signatureStats?.context || 0,
+        avgElementCounts: {
+          critical: elementCounts?.avg_critical || 0,
+          important: elementCounts?.avg_important || 0,
+          context: elementCounts?.avg_context || 0
         }
       };
     } catch (error) {
       console.error('[BidirectionalCache] DOM signature metrics error:', error);
-      return {};
+      // Return a valid DOMSignatureMetrics object with default values
+      return {
+        total: 0,
+        critical: 0,
+        important: 0,
+        context: 0,
+        avgElementCounts: {
+          critical: 0,
+          important: 0,
+          context: 0
+        }
+      };
     }
   }
 
@@ -1696,8 +1793,8 @@ export class BidirectionalCache {
       `).get() as any;
       
       return {
-        generated: baseMetrics.selector_cache?.total_selectors || 0,
-        cached: baseMetrics.selector_cache?.selectors_with_dom_signature || 0,
+        generated: baseMetrics.total || 0,
+        cached: baseMetrics.critical + baseMetrics.important + baseMetrics.context,
         hitRate: ((hitRateStats?.signature_hits || 0) / Math.max(hitRateStats?.total_requests || 1, 1)) * 100,
         avgConfidence: hitRateStats?.avg_confidence || 0,
         changeDetections: changeDetectionStats?.changes_detected || 0,

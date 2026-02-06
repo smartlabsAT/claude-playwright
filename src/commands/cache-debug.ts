@@ -69,7 +69,7 @@ export class CacheDebugTool {
       // Performance metrics
       console.log('\n🎯 Performance Metrics:');
       console.log('-'.repeat(40));
-      console.log(`Cache Hit Rate: ${(stats.operations?.hit_rate || 0).toFixed(1)}%`);
+      console.log(`Cache Hit Rate: ${((stats.performance?.hitRate || 0) * 100).toFixed(1)}%`);
       console.log(`DOM Signature Hit Rate: ${domStats.hitRate.toFixed(1)}%`);
       console.log(`False Positive Rate: ${enhancedStats.falsePositiveRate.toFixed(1)}%`);
       console.log(`Cross-env Portability: ${enhancedStats.portabilityRate.toFixed(1)}%`);
@@ -77,7 +77,7 @@ export class CacheDebugTool {
       // Storage analysis
       console.log('\n💾 Storage Analysis:');
       console.log('-'.repeat(40));
-      console.log(`Selector Cache Entries: ${stats.storage?.total_selectors || 0}`);
+      console.log(`Selector Cache Entries: ${stats.storage?.unique_selectors || 0}`);
       console.log(`Input Mappings: ${stats.storage?.total_mappings || 0}`);
       console.log(`DOM Signatures Generated: ${domStats.generated}`);
       console.log(`Cross-env Matches: ${domStats.crossEnvMatches}`);

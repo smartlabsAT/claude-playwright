@@ -14,6 +14,7 @@ import { TestPatternMatcher } from '../core/test-pattern-matcher.js';
 import { ProtocolValidationLayer } from '../core/protocol-validation-layer.js';
 import { SecurityValidator } from '../core/security-validator.js';
 import type { MCPToolResponse, TestStep, ErrorContext } from '../types/common.js';
+import { safeJSONParse } from '../utils/safe-json.js';
 
 // __dirname is available in CommonJS mode
 
@@ -132,7 +133,11 @@ async function loadSession(sessionName: string): Promise<SessionData | null> {
   
   if (fs.existsSync(sessionFile)) {
     try {
-      const sessionData: SessionData = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
+      const sessionData: SessionData = safeJSONParse(
+        fs.readFileSync(sessionFile, 'utf8'),
+        { cookies: [], origins: [] } as SessionData,
+        `session file: ${sessionName}`
+      );
       console.error(`[Claude-Playwright MCP] Loaded session: ${sessionName}`);
       return sessionData;
     } catch (error) {
@@ -884,7 +889,7 @@ server.tool(
       
       await saveSession(sessionName);
       
-      const cookies = await context!.cookies();
+      const cookies = await context.cookies();
       
       return {
         content: [{
@@ -1299,7 +1304,7 @@ server.tool(
       const url = page.url();
       
       // Check if user is logged in (basic check)
-      const cookies = await context!.cookies();
+      const cookies = context ? await context.cookies() : [];
       const hasAuthCookie = cookies.some(c => 
         c.name.toLowerCase().includes('auth') || 
         c.name.toLowerCase().includes('session') ||
