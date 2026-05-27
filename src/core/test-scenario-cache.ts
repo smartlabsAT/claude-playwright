@@ -828,45 +828,25 @@ export class TestScenarioCache extends BidirectionalCache {
   /**
    * Execute a single test step
    */
-  private async executeStep(step: TestStep, adaptContext?: {url?: string, profile?: string}, adaptations?: string[]): Promise<void> {
-    // This is a architectural limitation: TestScenarioCache shouldn't directly control browser
-    // The browser instance is managed by the MCP server
-    // For now, we'll simulate execution and add proper logging
-    
-    const startTime = Date.now();
-    
+  private executeStep(step: TestStep, adaptContext?: {url?: string, profile?: string}, adaptations?: string[]): void {
+    // Logging-only stub — browser execution is handled by server.ts executeTestScenarioWithBrowser()
     switch (step.action) {
       case 'navigate':
         console.error(`[TestScenarioCache] 🌐 Navigate to: ${step.target}`);
-        // Real implementation would call: await browser.goto(step.target)
-        await new Promise(resolve => setTimeout(resolve, 100)); // Simulate network delay
         break;
-        
       case 'click':
         console.error(`[TestScenarioCache] 👆 Click element: ${step.target}`);
-        // Real implementation would call: await page.click(step.target)
-        await new Promise(resolve => setTimeout(resolve, 50)); // Simulate click delay
         break;
-        
       case 'type':
         console.error(`[TestScenarioCache] ⌨️ Type "${step.value}" into: ${step.target}`);
-        // Real implementation would call: await page.fill(step.target, step.value)
-        await new Promise(resolve => setTimeout(resolve, 80)); // Simulate typing delay
         break;
-        
       case 'screenshot':
         console.error(`[TestScenarioCache] 📸 Take screenshot`);
-        // Real implementation would call: await page.screenshot()
-        await new Promise(resolve => setTimeout(resolve, 200)); // Simulate screenshot delay
         break;
-        
       default:
         console.error(`[TestScenarioCache] ⚠️ Unknown action: ${step.action}`);
-        await new Promise(resolve => setTimeout(resolve, 10));
     }
-    
-    const executionTime = Date.now() - startTime;
-    console.error(`[TestScenarioCache] ✅ Step completed in ${executionTime}ms`);
+    console.error(`[TestScenarioCache] Step logged: ${step.action}`);
   }
 
   /**
