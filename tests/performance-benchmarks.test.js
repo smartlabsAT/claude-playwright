@@ -208,10 +208,10 @@ class PerformanceBenchmarkRunner {
     this.log('Benchmarking test matching accuracy...');
     
     const testScript = `
-      import { ContextAwareSimilarityCalculator } from '../dist/core/context-aware-similarity.js';
+      import { ContextAwareSimilarity } from '../dist/core/context-aware-similarity.js';
       import { SmartNormalizer } from '../dist/core/smart-normalizer.js';
       
-      const calculator = new ContextAwareSimilarityCalculator();
+      const calculator = new ContextAwareSimilarity();
       const normalizer = new SmartNormalizer();
       
       // Test cases with expected match results

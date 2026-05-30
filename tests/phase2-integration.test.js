@@ -215,9 +215,9 @@ class Phase2TestRunner {
     this.log('Testing context-aware similarity with action conflict prevention...');
     
     const testScript = `
-      import { ContextAwareSimilarityCalculator } from '../dist/core/context-aware-similarity.js';
+      import { ContextAwareSimilarity } from '../dist/core/context-aware-similarity.js';
       
-      const calculator = new ContextAwareSimilarityCalculator();
+      const calculator = new ContextAwareSimilarity();
       
       try {
         // Test similar actions that should match

@@ -63,13 +63,15 @@ temp/
 *.bak
 .cache/
 
-# Development test files
+# Development test files (ad-hoc scripts, e.g. *-test.js dev probes)
 test-*.js
 *-test.js
 *.test.js.map
 cli-test-results.json
 final-cli-test-results.json
 test-wrapper.js
+# ...but the maintained npm-test suite under tests/ must stay tracked
+!tests/test-*.js
 
 # Claude-specific development
 .claude/
@@ -77,6 +79,12 @@ CLAUDE.md
 .claude-flow/
 .hive-mind/
 docs-work
+
+# Internal strategy & architecture docs (not for public consumption)
+.private/
+
+# @playwright/mcp runtime artifacts (page snapshots etc.)
+.playwright-mcp/
 # Development phase docs (keep in git, but can be ignored locally)
 # PHASE_*.md
 # WEEK_*.md
