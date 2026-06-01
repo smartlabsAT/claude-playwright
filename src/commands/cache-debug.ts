@@ -14,10 +14,10 @@
 
 import { Command } from 'commander';
 import { BidirectionalCache } from '../core/bidirectional-cache.js';
-import { EnhancedCacheKeyManager } from '../core/enhanced-cache-key.js';
+import { EnhancedCacheKeyManager } from '../core/bidirectional-cache.js';
 import { DOMSignatureManager } from '../utils/dom-signature.js';
 import { CacheMigrationManager } from '../core/cache-migration.js';
-import { ContextAwareSimilarity } from '../core/context-aware-similarity.js';
+import { ContextAwareSimilarity } from '../core/smart-normalizer.js';
 import * as fs from 'fs';
 import * as path from 'path';
 

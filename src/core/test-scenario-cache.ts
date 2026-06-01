@@ -2,15 +2,9 @@ import { BidirectionalCache } from './bidirectional-cache.js';
 import { SmartNormalizer } from './smart-normalizer.js';
 import crypto from 'crypto';
 import { safeJSONParse } from '../utils/safe-json.js';
+import type { TestStep } from '../types/common.js';
 
-export interface TestStep {
-  action: 'navigate' | 'click' | 'type' | 'wait' | 'assert' | 'screenshot';
-  target?: string;
-  value?: string;
-  selector?: string;
-  timeout?: number;
-  description: string;
-}
+export type { TestStep };
 
 export interface TestScenario {
   name: string;

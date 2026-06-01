@@ -1,14 +1,17 @@
 import Database from 'better-sqlite3';
+import { LRUCache } from 'lru-cache';
 import { SmartNormalizer, NormalizationResult } from './smart-normalizer.js';
 import { DOMSignatureManager, DOMSignatureResult, DOMSignatureUtils } from '../utils/dom-signature.js';
-import { EnhancedCacheKeyManager, EnhancedCacheKey, CacheKeyComponents, TestStep } from './enhanced-cache-key.js';
+// Known circular import with cache-migration.ts (it imports EnhancedCacheKeyManager from here).
+// Works at runtime because all usages are inside class bodies (deferred), not at module top level.
+// Should be untangled when the cache is redesigned in Epic 2.
 import { CacheMigrationManager, EnhancedCacheEntry } from './cache-migration.js';
 import crypto from 'crypto';
 import * as path from 'path';
 import { ProjectPaths } from '../utils/project-paths.js';
 import * as fs from 'fs';
 import type { Page } from 'playwright';
-import type { CacheStats, SnapshotData, SnapshotMetrics, DOMSignatureMetrics } from '../types/common.js';
+import type { CacheStats, SnapshotData, SnapshotMetrics, DOMSignatureMetrics, TestStep } from '../types/common.js';
 import { safeJSONParse } from '../utils/safe-json.js';
 
 interface SelectorCacheEntry {
@@ -110,8 +113,6 @@ interface TestPatternEntry {
   created_at: number;
   last_used: number;
 }
-
-// TestStep interface imported from enhanced-cache-key.js
 
 interface TestScenario {
   name: string;
@@ -1920,5 +1921,1149 @@ export class BidirectionalCache {
     }
 
     console.error('[Cache] Closed successfully');
+  }
+}
+
+// ===========================================================================
+// Enhanced Cache Key types & manager (inlined from former enhanced-cache-key.ts)
+// ===========================================================================
+
+/**
+ * Enhanced Cache Key Schema for Phase 2.2
+ * Provides improved cross-environment cache matching with structured test patterns
+ */
+
+export interface EnhancedCacheKey {
+  test_name_normalized: string;      // SmartNormalizer processed test name
+  url_pattern: string;               // Domain + path pattern, not full URL
+  dom_signature: string;             // Page structure fingerprint from Phase 2.1
+  steps_structure_hash: string;      // Test structure without sensitive values
+  profile: string;                   // Browser profile
+  version: number;                   // Schema version for migration
+}
+
+export interface CacheKeyComponents {
+  baseKey: string;                   // Original cache key
+  enhancedKey: EnhancedCacheKey;     // Enhanced structured key
+  legacyKey?: string;                // Backward compatibility key
+}
+
+export interface StepsStructureAnalysis {
+  actionPattern: string[];           // Sequence of actions: ['navigate', 'type', 'click']
+  selectorTypes: string[];           // Types of selectors: ['url', 'input', 'button']
+  conditionalLogic: boolean;         // Has conditional steps
+  loopsDetected: boolean;            // Has repeated patterns
+  structureComplexity: 'simple' | 'medium' | 'complex';
+}
+
+export interface URLPatternComponents {
+  protocol?: string;                 // http/https
+  domain?: string;                   // Domain name or wildcard
+  port?: string;                     // Port number
+  pathPattern: string;               // Path with wildcards: /login, /users/*/profile
+  queryPattern?: string;             // Query parameter pattern
+}
+
+/**
+ * Enhanced Cache Key Manager for Phase 2.2
+ * Manages the new enhanced cache key system with backward compatibility
+ */
+export class EnhancedCacheKeyManager {
+  private normalizer: SmartNormalizer;
+  private domSignatureManager: DOMSignatureManager;
+  private readonly CURRENT_VERSION = 1;
+
+  constructor() {
+    this.normalizer = new SmartNormalizer();
+    this.domSignatureManager = new DOMSignatureManager();
+  }
+
+  generateEnhancedKey(
+    testName: string,
+    url: string,
+    domSignature?: string,
+    steps?: TestStep[],
+    profile: string = 'default'
+  ): EnhancedCacheKey {
+    const normalizationResult = this.normalizer.normalize(testName);
+    const testNameNormalized = normalizationResult.normalized;
+    const urlPattern = this.extractURLPattern(url);
+    const domSig = domSignature || this.generateFallbackDOMSignature(url);
+    const stepsStructureHash = steps ? this.generateStepsStructureHash(steps) : 'no-steps';
+
+    return {
+      test_name_normalized: testNameNormalized,
+      url_pattern: urlPattern,
+      dom_signature: domSig,
+      steps_structure_hash: stepsStructureHash,
+      profile: profile,
+      version: this.CURRENT_VERSION
+    };
+  }
+
+  generateCacheKeyComponents(
+    testName: string,
+    url: string,
+    domSignature?: string,
+    steps?: TestStep[],
+    profile: string = 'default'
+  ): CacheKeyComponents {
+    const enhancedKey = this.generateEnhancedKey(testName, url, domSignature, steps, profile);
+    const baseKey = this.generateBaseKey(enhancedKey);
+    const legacyKey = this.generateLegacyKey(testName, url, profile);
+
+    return {
+      baseKey,
+      enhancedKey,
+      legacyKey
+    };
+  }
+
+  extractURLPattern(url: string): string {
+    try {
+      const urlObj = new URL(url);
+      let pathPattern = urlObj.pathname;
+
+      pathPattern = pathPattern.replace(/\/\d+/g, '/*');
+      pathPattern = pathPattern.replace(/\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '/*');
+      pathPattern = pathPattern.replace(/\/[a-zA-Z0-9_-]{10,}/g, '/*');
+
+      if (urlObj.hostname === 'localhost' || urlObj.hostname.startsWith('127.') || urlObj.hostname.endsWith('.local')) {
+        return '*' + pathPattern;
+      }
+
+      if (urlObj.hostname.includes('staging') || urlObj.hostname.includes('dev')) {
+        const parts = urlObj.hostname.split('.');
+        if (parts.length >= 2) {
+          const baseDomain = parts.slice(-2).join('.');
+          return `*.${baseDomain}${pathPattern}`;
+        }
+        return '*' + pathPattern;
+      }
+
+      const domainPattern = urlObj.hostname.replace(/^(www\.)/, '*.');
+      const parts = urlObj.hostname.split('.');
+      if (parts.length > 2 && !urlObj.hostname.startsWith('www.')) {
+        const baseDomain = parts.slice(-2).join('.');
+        return `*.${baseDomain}${pathPattern}`;
+      }
+
+      return domainPattern + pathPattern;
+    } catch (error) {
+      console.error('[EnhancedCacheKey] URL pattern extraction failed:', error);
+      return url.replace(/https?:\/\/[^/]+/, '*').replace(/\/\d+/g, '/*');
+    }
+  }
+
+  analyzeStepsStructure(steps: TestStep[]): StepsStructureAnalysis {
+    if (!steps || steps.length === 0) {
+      return {
+        actionPattern: [],
+        selectorTypes: [],
+        conditionalLogic: false,
+        loopsDetected: false,
+        structureComplexity: 'simple'
+      };
+    }
+
+    const actionPattern = steps.map(step => step.action);
+    const selectorTypes = steps
+      .filter(step => step.selector || step.target)
+      .map(step => this.classifySelector(step.selector || step.target || ''));
+
+    const conditionalLogic = steps.some(step =>
+      step.description?.toLowerCase().includes('if') ||
+      step.description?.toLowerCase().includes('when') ||
+      step.action === 'wait'
+    );
+
+    const loopsDetected = this.detectActionLoops(actionPattern);
+
+    let structureComplexity: 'simple' | 'medium' | 'complex' = 'simple';
+    if (steps.length > 10 || loopsDetected || conditionalLogic) {
+      structureComplexity = 'complex';
+    } else if (steps.length > 5 || selectorTypes.length > 3) {
+      structureComplexity = 'medium';
+    }
+
+    return {
+      actionPattern,
+      selectorTypes: [...new Set(selectorTypes)],
+      conditionalLogic,
+      loopsDetected,
+      structureComplexity
+    };
+  }
+
+  generateStepsStructureHash(steps: TestStep[]): string {
+    const analysis = this.analyzeStepsStructure(steps);
+
+    const structureSignature = {
+      actions: analysis.actionPattern,
+      selectors: analysis.selectorTypes,
+      conditional: analysis.conditionalLogic,
+      loops: analysis.loopsDetected,
+      complexity: analysis.structureComplexity,
+      stepCount: steps.length
+    };
+
+    const signatureString = JSON.stringify(structureSignature, Object.keys(structureSignature).sort());
+    return crypto.createHash('md5').update(signatureString).digest('hex').substring(0, 12);
+  }
+
+  private classifySelector(selector: string): string {
+    if (!selector) return 'unknown';
+
+    if (selector.startsWith('http') || selector.includes('://')) return 'url';
+    if (selector.includes('input') || selector.includes('textarea') || selector.includes('[type=')) return 'input';
+    if (selector.includes('button') || selector.includes('[role="button"]') || selector.includes('.btn')) return 'button';
+    if (selector.includes('a[') || selector.includes('link') || selector.includes('[href]')) return 'link';
+    if (selector.includes('nav') || selector.includes('menu') || selector.includes('[role="navigation"]')) return 'navigation';
+    if (selector.includes('form') || selector.includes('select') || selector.includes('option')) return 'form';
+    if (selector.startsWith('#') || selector.startsWith('.') || selector.includes('[')) return 'element';
+
+    return 'text';
+  }
+
+  private detectActionLoops(actions: string[]): boolean {
+    if (actions.length < 4) return false;
+
+    for (let i = 0; i < actions.length - 3; i++) {
+      const pattern = actions.slice(i, i + 2);
+      const remaining = actions.slice(i + 2);
+
+      for (let j = 0; j <= remaining.length - 2; j++) {
+        const candidate = remaining.slice(j, j + 2);
+        if (pattern[0] === candidate[0] && pattern[1] === candidate[1]) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private generateFallbackDOMSignature(url: string): string {
+    const urlHash = crypto.createHash('md5').update(url).digest('hex').substring(0, 8);
+    return `fallback:${urlHash}:${urlHash}`;
+  }
+
+  private generateBaseKey(enhancedKey: EnhancedCacheKey): string {
+    const components = [
+      `v${enhancedKey.version}`,
+      enhancedKey.test_name_normalized,
+      enhancedKey.url_pattern,
+      enhancedKey.dom_signature,
+      enhancedKey.steps_structure_hash,
+      enhancedKey.profile
+    ];
+
+    return crypto.createHash('md5')
+      .update(components.join(':'))
+      .digest('hex');
+  }
+
+  private generateLegacyKey(testName: string, url: string, profile: string): string {
+    const components = [testName, url, profile];
+    return crypto.createHash('md5')
+      .update(components.join(':'))
+      .digest('hex');
+  }
+
+  parseEnhancedKey(keyData: string): EnhancedCacheKey | null {
+    try {
+      return JSON.parse(keyData);
+    } catch (error) {
+      console.error('[EnhancedCacheKey] Failed to parse enhanced key:', error);
+      return null;
+    }
+  }
+
+  serializeEnhancedKey(key: EnhancedCacheKey): string {
+    return JSON.stringify(key);
+  }
+
+  calculateKeySimilarity(key1: EnhancedCacheKey, key2: EnhancedCacheKey): number {
+    let score = 0;
+    let weights = 0;
+
+    if (key1.test_name_normalized === key2.test_name_normalized) {
+      score += 3;
+    } else {
+      const norm1 = this.normalizer.normalize(key1.test_name_normalized);
+      const norm2 = this.normalizer.normalize(key2.test_name_normalized);
+      const similarity = this.normalizer.calculateSimilarity(norm1, norm2);
+      score += similarity * 3;
+    }
+    weights += 3;
+
+    if (key1.url_pattern === key2.url_pattern) {
+      score += 2;
+    } else {
+      const urlSimilarity = this.calculateURLPatternSimilarity(key1.url_pattern, key2.url_pattern);
+      score += urlSimilarity * 2;
+    }
+    weights += 2;
+
+    if (key1.dom_signature === key2.dom_signature) {
+      score += 2;
+    } else if (DOMSignatureManager.isValidSignature(key1.dom_signature) &&
+               DOMSignatureManager.isValidSignature(key2.dom_signature)) {
+      const domSimilarity = this.calculateDOMSimilarity(key1.dom_signature, key2.dom_signature);
+      score += domSimilarity * 2;
+    }
+    weights += 2;
+
+    if (key1.steps_structure_hash === key2.steps_structure_hash) {
+      score += 1;
+    }
+    weights += 1;
+
+    if (key1.profile === key2.profile) {
+      score += 1;
+    }
+    weights += 1;
+
+    return weights > 0 ? score / weights : 0;
+  }
+
+  private calculateURLPatternSimilarity(pattern1: string, pattern2: string): number {
+    if (pattern1 === pattern2) return 1.0;
+
+    const parts1 = pattern1.split('/').filter(p => p.length > 0);
+    const parts2 = pattern2.split('/').filter(p => p.length > 0);
+
+    const maxLength = Math.max(parts1.length, parts2.length);
+    if (maxLength === 0) return 1.0;
+
+    let matches = 0;
+    for (let i = 0; i < maxLength; i++) {
+      const part1 = parts1[i] || '';
+      const part2 = parts2[i] || '';
+
+      if (part1 === part2) {
+        matches++;
+      } else if (part1 === '*' || part2 === '*') {
+        matches += 0.5;
+      }
+    }
+
+    return matches / maxLength;
+  }
+
+  private calculateDOMSimilarity(sig1: string, sig2: string): number {
+    try {
+      return DOMSignatureUtils.calculateSimilarity(sig1, sig2);
+    } catch (error) {
+      console.error('[EnhancedCacheKey] DOM similarity calculation failed:', error);
+      return sig1 === sig2 ? 1.0 : 0.0;
+    }
+  }
+
+  isValidEnhancedKey(key: EnhancedCacheKey): boolean {
+    return !!(
+      key.test_name_normalized &&
+      key.url_pattern &&
+      key.dom_signature &&
+      key.steps_structure_hash &&
+      key.profile &&
+      typeof key.version === 'number' &&
+      key.version >= 1
+    );
+  }
+}
+
+// ===========================================================================
+// Tiered cache (LRU memory + SQLite, inlined from former tiered-cache.ts)
+// ===========================================================================
+
+interface TieredCacheEntry {
+  selector: string;
+  confidence: number;
+  source: 'exact' | 'normalized' | 'reverse' | 'fuzzy';
+  cached: boolean;
+  timestamp: number;
+}
+
+interface TieredCacheOptions {
+  memorySize?: number;
+  memoryTTL?: number;
+  preloadCommonSelectors?: boolean;
+}
+
+export class TieredCache {
+  private memoryCache: LRUCache<string, TieredCacheEntry>;
+  private bidirectionalCache: BidirectionalCache;
+  private stats = {
+    memoryHits: 0,
+    sqliteHits: 0,
+    misses: 0,
+    totalRequests: 0
+  };
+
+  constructor(
+    bidirectionalCache: BidirectionalCache,
+    options: TieredCacheOptions = {}
+  ) {
+    this.bidirectionalCache = bidirectionalCache;
+
+    this.memoryCache = new LRUCache<string, TieredCacheEntry>({
+      max: options.memorySize ?? 100,
+      ttl: options.memoryTTL ?? 300000,
+      updateAgeOnGet: true,
+      updateAgeOnHas: true
+    });
+
+    if (options.preloadCommonSelectors) {
+      this.preloadCommonSelectors();
+    }
+  }
+
+  async get(input: string, url: string): Promise<TieredCacheEntry | null> {
+    this.stats.totalRequests++;
+    const memoryKey = this.createMemoryKey(input, url);
+
+    if (this.memoryCache.has(memoryKey)) {
+      const cached = this.memoryCache.get(memoryKey);
+      if (cached) {
+        this.stats.memoryHits++;
+        console.error(`[TieredCache] Memory HIT for "${input}": ${cached.selector} (${cached.source})`);
+        return cached;
+      }
+    }
+
+    const result = await this.bidirectionalCache.get(input, url);
+
+    if (result) {
+      this.stats.sqliteHits++;
+      const cacheEntry: TieredCacheEntry = {
+        ...result,
+        timestamp: Date.now()
+      };
+
+      this.memoryCache.set(memoryKey, cacheEntry);
+      await this.cacheVariations(input, url, cacheEntry);
+
+      console.error(`[TieredCache] SQLite HIT for "${input}": ${result.selector} (${result.source})`);
+      return cacheEntry;
+    }
+
+    this.stats.misses++;
+    console.error(`[TieredCache] MISS for "${input}"`);
+    return null;
+  }
+
+  async set(input: string, url: string, selector: string): Promise<void> {
+    await this.bidirectionalCache.set(input, url, selector);
+
+    const memoryKey = this.createMemoryKey(input, url);
+    const cacheEntry: TieredCacheEntry = {
+      selector,
+      confidence: 0.8,
+      source: 'exact',
+      cached: true,
+      timestamp: Date.now()
+    };
+
+    this.memoryCache.set(memoryKey, cacheEntry);
+    await this.cacheVariations(input, url, cacheEntry);
+
+    console.error(`[TieredCache] STORED "${input}" → ${selector}`);
+  }
+
+  private createMemoryKey(input: string, url: string): string {
+    return `${input.toLowerCase().trim()}|${url}`;
+  }
+
+  private async cacheVariations(input: string, url: string, cacheEntry: TieredCacheEntry): Promise<void> {
+    const variations = this.generateInputVariations(input);
+
+    for (const variation of variations) {
+      const varKey = this.createMemoryKey(variation, url);
+      if (!this.memoryCache.has(varKey)) {
+        const varEntry: TieredCacheEntry = {
+          ...cacheEntry,
+          confidence: cacheEntry.confidence * 0.95,
+          source: 'normalized'
+        };
+        this.memoryCache.set(varKey, varEntry);
+      }
+    }
+  }
+
+  private generateInputVariations(input: string): string[] {
+    const variations = new Set<string>();
+
+    variations.add(input.toLowerCase());
+    variations.add(input.toLowerCase().trim());
+    variations.add(input.replace(/\s+/g, ' ').trim());
+    variations.add(input.replace(/\b(the|a|an)\s+/gi, '').trim());
+
+    const actionMappings = [
+      ['click', 'press', 'tap', 'hit'],
+      ['type', 'enter', 'input', 'fill'],
+      ['select', 'choose', 'pick']
+    ];
+
+    for (const synonyms of actionMappings) {
+      for (let i = 0; i < synonyms.length; i++) {
+        for (let j = 0; j < synonyms.length; j++) {
+          if (i !== j) {
+            const regex = new RegExp(`\\b${synonyms[i]}\\b`, 'gi');
+            if (regex.test(input)) {
+              variations.add(input.replace(regex, synonyms[j]));
+            }
+          }
+        }
+      }
+    }
+
+    variations.add(input.replace(/\s+button\s*$/i, '').trim());
+
+    return Array.from(variations).slice(0, 8);
+  }
+
+  private async preloadCommonSelectors(): Promise<void> {
+    try {
+      const stats = await this.bidirectionalCache.getStats();
+      console.error(`[TieredCache] Preloading enabled - ${stats.storage?.unique_selectors || 0} selectors available`);
+    } catch (error) {
+      console.error('[TieredCache] Preload failed:', error);
+    }
+  }
+
+  async invalidateForUrl(url: string): Promise<void> {
+    const keysToDelete: string[] = [];
+
+    for (const [key] of this.memoryCache.entries()) {
+      if (key.endsWith(`|${url}`)) {
+        keysToDelete.push(key);
+      }
+    }
+
+    for (const key of keysToDelete) {
+      this.memoryCache.delete(key);
+    }
+
+    console.error(`[TieredCache] Invalidated ${keysToDelete.length} memory entries for ${url}`);
+  }
+
+  async clear(): Promise<void> {
+    this.memoryCache.clear();
+    await this.bidirectionalCache.clear();
+
+    this.stats = {
+      memoryHits: 0,
+      sqliteHits: 0,
+      misses: 0,
+      totalRequests: 0
+    };
+
+    console.error('[TieredCache] All caches cleared');
+  }
+
+  getStats(): any {
+    const memoryHitRate = this.stats.totalRequests > 0
+      ? (this.stats.memoryHits / this.stats.totalRequests) * 100
+      : 0;
+
+    const sqliteHitRate = this.stats.totalRequests > 0
+      ? (this.stats.sqliteHits / this.stats.totalRequests) * 100
+      : 0;
+
+    const overallHitRate = this.stats.totalRequests > 0
+      ? ((this.stats.memoryHits + this.stats.sqliteHits) / this.stats.totalRequests) * 100
+      : 0;
+
+    return {
+      tiered: {
+        memoryHitRate: Math.round(memoryHitRate * 10) / 10,
+        sqliteHitRate: Math.round(sqliteHitRate * 10) / 10,
+        overallHitRate: Math.round(overallHitRate * 10) / 10,
+        totalRequests: this.stats.totalRequests,
+        memorySize: this.memoryCache.size,
+        memoryMax: this.memoryCache.max
+      },
+      breakdown: {
+        memoryHits: this.stats.memoryHits,
+        sqliteHits: this.stats.sqliteHits,
+        misses: this.stats.misses
+      }
+    };
+  }
+
+  async wrapSelectorOperation<T>(
+    description: string,
+    url: string,
+    operation: (selector: string) => Promise<T>,
+    fallbackSelector?: string
+  ): Promise<{ result: T; cached: boolean; selector: string }> {
+    const cached = await this.get(description, url);
+    if (cached) {
+      console.error(`[TieredCache] Cache HIT for "${description}": ${cached.selector}`);
+
+      try {
+        const startTime = Date.now();
+        const result = await operation(cached.selector);
+        const duration = Date.now() - startTime;
+        console.error(`[TieredCache] ✅ VALIDATED cached selector [${duration}ms]: ${cached.selector}`);
+
+        await this.set(description, url, cached.selector);
+
+        return {
+          result,
+          cached: true,
+          selector: cached.selector
+        };
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[TieredCache] ❌ CACHED SELECTOR FAILED: ${cached.selector} → ${errorMsg.substring(0, 100)}`);
+
+        const memKey = this.createMemoryKey(description, url);
+        this.memoryCache.delete(memKey);
+
+        await this.bidirectionalCache.invalidateSelector(cached.selector, url);
+      }
+    }
+
+    const universalFallbacks = this.generateUniversalFallbacks(description, fallbackSelector || null);
+
+    console.error(`[TieredCache] Trying ${universalFallbacks.length} universal fallbacks for "${description}"`);
+
+    let lastError;
+    for (let i = 0; i < universalFallbacks.length; i++) {
+      const currentSelector = universalFallbacks[i];
+      console.error(`[TieredCache] Fallback ${i+1}/${universalFallbacks.length}: "${currentSelector}"`);
+
+      try {
+        const startTime = Date.now();
+        const result = await operation(currentSelector);
+        const duration = Date.now() - startTime;
+
+        await this.set(description, url, currentSelector);
+        console.error(`[TieredCache] ✅ SUCCESS fallback #${i+1} [${duration}ms]: "${currentSelector}" → now cached`);
+
+        return {
+          result,
+          cached: false,
+          selector: currentSelector
+        };
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[TieredCache] ❌ FAILED fallback #${i+1}: "${currentSelector}" → ${errorMsg.substring(0, 100)}`);
+        lastError = error;
+        continue;
+      }
+    }
+
+    console.error(`[TieredCache] ALL fallbacks failed for "${description}"`);
+    throw lastError || new Error('All universal fallback strategies failed');
+  }
+
+  private extractTextFromSelector(description: string): string | null {
+    const patterns = [
+      /:has-text\(["']([^"']+)["']\)/,
+      /:has-text\(([^)]+)\)/,
+      /text=["']([^"']+)["']/,
+      /text=([^"'\s)]+)/,
+      /["']([^"']+)["']/
+    ];
+
+    for (const pattern of patterns) {
+      const match = description.match(pattern);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+
+    const cleaned = description
+      .replace(/^(button|a|span|div|input)[:|\s]/i, '')
+      .replace(/:first.*$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return cleaned || null;
+  }
+
+  private generateUniversalFallbacks(description: string, originalSelector: string | null): string[] {
+    const fallbacks: string[] = [];
+
+    if (originalSelector && originalSelector.trim()) {
+      fallbacks.push(originalSelector.trim());
+    }
+
+    const extractedText = this.extractTextFromSelector(description);
+    const cleanDescription = extractedText || description.trim();
+
+    console.error(`[TieredCache] Text extraction: "${description}" → "${cleanDescription}"${extractedText ? ' (extracted)' : ' (original)'}`);
+
+    if (cleanDescription && cleanDescription.length > 0) {
+      const fixedOriginal = originalSelector
+        ?.replace(/:text\(/g, ':has-text(')
+        ?.replace(/:first\b/g, ':first-of-type')
+        ?.replace(/\btext\(/g, 'text=');
+
+      if (fixedOriginal && fixedOriginal !== originalSelector) {
+        console.error(`[TieredCache] Syntax fixed: "${originalSelector}" → "${fixedOriginal}"`);
+        fallbacks.push(fixedOriginal);
+      }
+
+      fallbacks.push(
+        `text="${cleanDescription}"`,
+        `text=${cleanDescription}`,
+        `*:has-text("${cleanDescription}")`,
+        `[role="button"]:has-text("${cleanDescription}")`,
+        `[role="link"]:has-text("${cleanDescription}")`,
+        `[role="menuitem"]:has-text("${cleanDescription}")`,
+        `[onclick]:has-text("${cleanDescription}")`,
+        `[ng-click]:has-text("${cleanDescription}")`,
+        `[v-on\\:click]:has-text("${cleanDescription}")`,
+        `[aria-label*="${cleanDescription}"]`,
+        `[title*="${cleanDescription}"]`,
+        `[alt*="${cleanDescription}"]`,
+        `[data-testid*="${cleanDescription.toLowerCase().replace(/\s+/g, '-')}"]`,
+        `button:has-text("${cleanDescription}")`,
+        `a:has-text("${cleanDescription}")`,
+        `input[value*="${cleanDescription}"]`,
+        `span:has-text("${cleanDescription}")`,
+        `div:has-text("${cleanDescription}")`,
+        `* >> text="${cleanDescription}"`,
+        `* >> text=${cleanDescription}`,
+        `*:visible:has-text("${cleanDescription}")`
+      );
+
+      if (cleanDescription.toLowerCase().includes('first')) {
+        const baseText = cleanDescription.replace(/\s*(first|:first)\s*/gi, '').trim();
+        if (baseText && baseText !== cleanDescription) {
+          fallbacks.push(
+            `*:has-text("${baseText}"):first-of-type`,
+            `button:has-text("${baseText}"):first-of-type`,
+            `a:has-text("${baseText}"):first-of-type`,
+            `[role="button"]:has-text("${baseText}"):first-of-type`
+          );
+        }
+      }
+    }
+
+    return [...new Set(fallbacks.filter(Boolean))];
+  }
+
+  close(): void {
+    this.memoryCache.clear();
+    this.bidirectionalCache.close();
+  }
+}
+
+// ===========================================================================
+// Enhanced cache integration (inlined from former enhanced-cache-integration.ts)
+// Page-aware singleton wrapper around BidirectionalCache + TieredCache.
+// ===========================================================================
+
+export class EnhancedCacheIntegration {
+  private static instance: EnhancedCacheIntegration | null = null;
+  private bidirectionalCache: BidirectionalCache;
+  private tieredCache: TieredCache;
+  private currentPage?: Page;
+  private currentUrl: string = '';
+  private currentProfile?: string;
+  private navigationCount: number = 0;
+
+  private constructor() {
+    this.bidirectionalCache = new BidirectionalCache({
+      maxSizeMB: 50,
+      selectorTTL: 300000,
+      cleanupInterval: 60000,
+      maxVariationsPerSelector: 15
+    });
+
+    this.tieredCache = new TieredCache(this.bidirectionalCache, {
+      memorySize: 100,
+      memoryTTL: 300000,
+      preloadCommonSelectors: true
+    });
+
+    console.error('[EnhancedCache] Initialized bidirectional cache system');
+  }
+
+  static getInstance(): EnhancedCacheIntegration {
+    if (!EnhancedCacheIntegration.instance) {
+      EnhancedCacheIntegration.instance = new EnhancedCacheIntegration();
+    }
+    return EnhancedCacheIntegration.instance;
+  }
+
+  setPage(page: Page, url: string, profile?: string): void {
+    this.currentPage = page;
+    this.currentUrl = url;
+    this.currentProfile = profile;
+
+    this.setupPageListeners(page);
+
+    console.error(`[EnhancedCache] Context set for ${url} (profile: ${profile || 'default'})`);
+  }
+
+  private setupPageListeners(page: Page): void {
+    page.on('framenavigated', async (frame) => {
+      if (frame === page.mainFrame()) {
+        const newUrl = frame.url();
+        if (newUrl !== this.currentUrl) {
+          console.error(`[EnhancedCache] Navigation detected: ${this.currentUrl} -> ${newUrl}`);
+          await this.handleNavigation(newUrl);
+        }
+      }
+    });
+  }
+
+  private async handleNavigation(newUrl: string): Promise<void> {
+    this.navigationCount++;
+    await this.tieredCache.invalidateForUrl(this.currentUrl);
+    this.currentUrl = newUrl;
+    console.error(`[EnhancedCache] Navigation handled, count: ${this.navigationCount}`);
+  }
+
+  async getCachedSelector(description: string): Promise<any | null> {
+    const result = await this.tieredCache.get(description, this.currentUrl);
+    return result ? {
+      selector: result.selector,
+      strategy: 'cached',
+      confidence: result.confidence,
+      source: result.source
+    } : null;
+  }
+
+  async cacheSelector(description: string, selector: string, strategy: string = 'css'): Promise<void> {
+    await this.tieredCache.set(description, this.currentUrl, selector);
+    console.error(`[EnhancedCache] Cached "${description}" -> ${selector}`);
+  }
+
+  async wrapSelectorOperation<T>(
+    description: string,
+    operation: (selector: string) => Promise<T>,
+    fallbackSelector: string
+  ): Promise<{ result: T; cached: boolean; performance: any }> {
+    const startTime = Date.now();
+
+    try {
+      const wrappedResult = await this.tieredCache.wrapSelectorOperation(
+        description,
+        this.currentUrl,
+        operation,
+        fallbackSelector
+      );
+
+      const endTime = Date.now();
+      return {
+        ...wrappedResult,
+        performance: {
+          duration: endTime - startTime,
+          cacheHit: wrappedResult.cached
+        }
+      };
+    } catch (error) {
+      const endTime = Date.now();
+      console.error(`[EnhancedCache] Operation failed after ${endTime - startTime}ms:`, error);
+      throw error;
+    }
+  }
+
+  async wrapSelectorOperationEnhanced<T>(
+    testName: string,
+    description: string,
+    url: string,
+    operation: (selector: string) => Promise<T>,
+    steps?: any[],
+    profile?: string,
+    page?: any
+  ): Promise<{ result: T; cached: boolean; performance: any }> {
+    const startTime = Date.now();
+
+    try {
+      const enhancedResult = await this.bidirectionalCache.getEnhanced(
+        testName,
+        url,
+        steps,
+        profile || this.currentProfile || 'default',
+        page || this.currentPage
+      );
+
+      if (enhancedResult) {
+        try {
+          const result = await operation(enhancedResult.selector);
+          const endTime = Date.now();
+
+          console.error(`[EnhancedCache] ✅ Enhanced cache HIT: ${testName} → ${enhancedResult.selector} [${endTime - startTime}ms]`);
+
+          return {
+            result,
+            cached: true,
+            performance: {
+              duration: endTime - startTime,
+              cacheHit: true,
+              source: enhancedResult.source
+            }
+          };
+        } catch (error) {
+          console.error(`[EnhancedCache] Enhanced cache selector failed, will learn new one:`, error);
+        }
+      }
+
+      const fallbackSelector = description;
+
+      try {
+        const result = await operation(fallbackSelector);
+
+        await this.bidirectionalCache.setEnhanced(
+          testName,
+          description,
+          url,
+          fallbackSelector,
+          steps,
+          profile || this.currentProfile || 'default',
+          page || this.currentPage
+        );
+
+        const endTime = Date.now();
+        console.error(`[EnhancedCache] ✅ Enhanced cache MISS → LEARN: ${testName} → ${fallbackSelector} [${endTime - startTime}ms]`);
+
+        return {
+          result,
+          cached: false,
+          performance: {
+            duration: endTime - startTime,
+            cacheHit: false,
+            learned: true
+          }
+        };
+      } catch (error) {
+        const endTime = Date.now();
+        console.error(`[EnhancedCache] ❌ Enhanced operation failed after ${endTime - startTime}ms:`, error);
+        throw error;
+      }
+    } catch (error) {
+      const endTime = Date.now();
+      console.error(`[EnhancedCache] Enhanced operation failed after ${endTime - startTime}ms:`, error);
+      throw error;
+    }
+  }
+
+  async getCachedSnapshot(): Promise<any | null> {
+    if (!this.currentPage) return null;
+
+    try {
+      const domHash = await this.computeDomHash();
+      const key = { url: this.currentUrl, domHash };
+
+      return await this.bidirectionalCache.getSnapshot(key, this.currentProfile);
+    } catch (error) {
+      console.error('[EnhancedCache] Get snapshot error:', error);
+      return null;
+    }
+  }
+
+  async cacheSnapshot(snapshot: any): Promise<void> {
+    if (!this.currentPage) return;
+
+    try {
+      const domHash = await this.computeDomHash();
+      const key = { url: this.currentUrl, domHash };
+
+      await this.bidirectionalCache.setSnapshot(key, snapshot, {
+        url: this.currentUrl,
+        profile: this.currentProfile
+      });
+
+      console.error(`[EnhancedCache] Cached snapshot for ${this.currentUrl}`);
+    } catch (error) {
+      console.error('[EnhancedCache] Cache snapshot error:', error);
+    }
+  }
+
+  async getOrCreateSnapshot(): Promise<any> {
+    const cached = await this.getCachedSnapshot();
+    if (cached) {
+      return cached;
+    }
+
+    if (!this.currentPage) {
+      throw new Error('No page context available for snapshot');
+    }
+
+    try {
+      const snapshot = await this.currentPage.accessibility.snapshot();
+      await this.cacheSnapshot(snapshot);
+      return snapshot;
+    } catch (error) {
+      console.error('[EnhancedCache] Create snapshot error:', error);
+      throw error;
+    }
+  }
+
+  private async computeDomHash(): Promise<string> {
+    if (!this.currentPage) return 'no-page';
+
+    try {
+      const domStructure = await this.currentPage.evaluate(() => {
+        const elements = (globalThis as any).document.querySelectorAll('*');
+        const tags = Array.from(elements).map((el: any) => el.tagName.toLowerCase());
+        return tags.slice(0, 50).join(',');
+      });
+
+      return crypto.createHash('md5').update(domStructure).digest('hex');
+    } catch (error) {
+      console.error('[EnhancedCache] DOM hash error:', error);
+      return `error-${Date.now()}`;
+    }
+  }
+
+  async learnFromSuccess(description: string, selector: string, context?: any): Promise<void> {
+    await this.tieredCache.set(description, this.currentUrl, selector);
+
+    if (context?.elementType || context?.attributes) {
+      console.error(`[EnhancedCache] Learning with context: ${JSON.stringify(context)}`);
+    }
+  }
+
+  async suggestAlternatives(description: string): Promise<string[]> {
+    try {
+      await this.bidirectionalCache.getStats();
+      return [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  async getMetrics(): Promise<any> {
+    try {
+      const tieredStats = this.tieredCache.getStats();
+      const bidirectionalStats = await this.bidirectionalCache.getStats();
+
+      return {
+        overview: {
+          currentUrl: this.currentUrl,
+          currentProfile: this.currentProfile || 'default',
+          navigationCount: this.navigationCount,
+          systemType: 'bidirectional'
+        },
+        performance: {
+          ...tieredStats.tiered,
+          breakdown: tieredStats.breakdown
+        },
+        storage: {
+          ...bidirectionalStats.storage,
+          operations: bidirectionalStats.operations,
+          snapshots: bidirectionalStats.snapshots
+        },
+        recommendations: this.generateRecommendations(tieredStats, bidirectionalStats)
+      };
+    } catch (error) {
+      console.error('[EnhancedCache] Metrics error:', error);
+      return {
+        error: 'Failed to retrieve metrics',
+        currentUrl: this.currentUrl,
+        navigationCount: this.navigationCount
+      };
+    }
+  }
+
+  private generateRecommendations(tieredStats: any, bidirectionalStats: any, domSignatureMetrics?: any, enhancedKeyMetrics?: any): string[] {
+    const recommendations: string[] = [];
+
+    if (tieredStats.tiered.overallHitRate < 50) {
+      recommendations.push("Low hit rate - consider using more consistent selector descriptions");
+    }
+
+    if (tieredStats.tiered.memoryHitRate < 30) {
+      recommendations.push("Memory cache underutilized - selectors may be too varied");
+    }
+
+    if (bidirectionalStats.storage?.avg_inputs_per_selector > 5) {
+      recommendations.push("High variation per selector - check for pattern consistency");
+    }
+
+    if (this.navigationCount > 10) {
+      recommendations.push("Frequent navigation detected - cache is adapting well");
+    }
+
+    if (domSignatureMetrics?.hitRate < 70) {
+      recommendations.push("Low DOM signature hit rate - consider improving page structure consistency");
+    }
+
+    if (enhancedKeyMetrics?.falsePositiveRate > 5) {
+      recommendations.push("High false positive rate - consider tightening similarity thresholds");
+    }
+
+    if (enhancedKeyMetrics?.portabilityRate < 60) {
+      recommendations.push("Low cross-environment portability - enhance cache key normalization");
+    }
+
+    return recommendations;
+  }
+
+  async invalidateAll(): Promise<void> {
+    await this.tieredCache.clear();
+    console.error('[EnhancedCache] All caches cleared');
+  }
+
+  async invalidateForUrl(url: string): Promise<void> {
+    await this.tieredCache.invalidateForUrl(url);
+    console.error(`[EnhancedCache] Invalidated cache for ${url}`);
+  }
+
+  async clearAll(): Promise<void> {
+    await this.tieredCache.clear();
+    console.error('[EnhancedCache] All caches cleared completely');
+  }
+
+  async getBidirectionalStats(): Promise<any> {
+    return await this.bidirectionalCache.getStats();
+  }
+
+  async healthCheck(): Promise<any> {
+    try {
+      const result = {
+        integration: true,
+        memoryCache: true,
+        sqliteCache: true,
+        bidirectionalCache: true,
+        errors: [] as string[]
+      };
+
+      try {
+        this.tieredCache.getStats();
+      } catch (error) {
+        result.memoryCache = false;
+        result.errors.push('Memory cache error: ' + (error instanceof Error ? error.message : String(error)));
+      }
+
+      try {
+        await this.bidirectionalCache.getStats();
+      } catch (error) {
+        result.bidirectionalCache = false;
+        result.errors.push('Bidirectional cache error: ' + (error instanceof Error ? error.message : String(error)));
+      }
+
+      try {
+        await this.bidirectionalCache.get('test', 'http://test.com');
+      } catch (error) {
+        result.sqliteCache = false;
+        result.errors.push('SQLite cache error: ' + (error instanceof Error ? error.message : String(error)));
+      }
+
+      return result;
+    } catch (error) {
+      return {
+        integration: false,
+        memoryCache: false,
+        sqliteCache: false,
+        bidirectionalCache: false,
+        errors: ['System error: ' + (error instanceof Error ? error.message : String(error))]
+      };
+    }
+  }
+
+  close(): void {
+    this.tieredCache.close();
+    EnhancedCacheIntegration.instance = null;
+    console.error('[EnhancedCache] System closed');
   }
 }
