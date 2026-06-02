@@ -20,10 +20,11 @@ The Claude Playwright Toolkit features an AI-aware caching system with universal
 AI-aware cache system with improved hit rates:
 
 #### Core Components:
-1. **SmartNormalizer** (`src/core/smart-normalizer.ts`) - Position-aware text normalization + early Playwright syntax fixing
-2. **BidirectionalCache** (`src/core/bidirectional-cache.ts`) - Dual-table system for input↔selector mapping with 4-level lookup
-3. **TieredCache** (`src/core/tiered-cache.ts`) - LRU memory (0.1ms) + SQLite persistence + 25+ universal fallbacks
-4. **EnhancedCacheIntegration** (`src/core/enhanced-cache-integration.ts`) - MCP server integration with performance monitoring
+1. **SmartNormalizer** (`src/core/smart-normalizer.ts`) - Position-aware text normalization + early Playwright syntax fixing + inlined context-aware similarity
+2. **BidirectionalCache** (`src/core/bidirectional-cache.ts`) - Dual-table system for input↔selector mapping with 4-level lookup. As of v0.2.0 also contains:
+   - **TieredCache** - LRU memory (0.1ms) + SQLite persistence + 25+ universal fallbacks (inlined)
+   - **EnhancedCacheKeyManager** - Enhanced cache key generation with URL/DOM/steps signatures (inlined)
+   - **EnhancedCacheIntegration** - MCP server integration singleton with performance monitoring (inlined)
 
 #### Database Schema (Bidirectional):
 ```sql
@@ -294,11 +295,13 @@ export PLAYWRIGHT_CACHE_DISABLED=true # Disable caching
 
 ### **Core Classes & File Locations**
 
-#### Primary Bidirectional Cache (v2):
-- **SmartNormalizer** (`src/core/smart-normalizer.ts:211`) - NEW: fixPlaywrightSyntax() method
-- **BidirectionalCache** (`src/core/bidirectional-cache.ts:85`) - initializeDatabase() with migration
-- **TieredCache** (`src/core/tiered-cache.ts:325`) - NEW: extractTextFromSelector() + generateUniversalFallbacks()
-- **EnhancedCacheIntegration** (`src/core/enhanced-cache-integration.ts`) - Unified MCP integration
+#### Primary Bidirectional Cache (v2 — consolidated in v0.2.0):
+- **SmartNormalizer** (`src/core/smart-normalizer.ts`) - fixPlaywrightSyntax() + ContextAwareSimilarity (inlined)
+- **BidirectionalCache** (`src/core/bidirectional-cache.ts`) - Single consolidated file containing:
+  - BidirectionalCache class - initializeDatabase() with migration
+  - TieredCache class - extractTextFromSelector() + generateUniversalFallbacks() (formerly tiered-cache.ts)
+  - EnhancedCacheKeyManager class - enhanced key generation (formerly enhanced-cache-key.ts)
+  - EnhancedCacheIntegration class - unified MCP integration singleton (formerly enhanced-cache-integration.ts)
 
 #### Legacy Cache System (v1):
 - **CacheManager** (`src/core/cache-manager.ts`) - SQLite backend
@@ -308,7 +311,7 @@ export PLAYWRIGHT_CACHE_DISABLED=true # Disable caching
 
 ### **Key Implementation Fixes (Latest Updates)**
 
-#### 1. **Cache Corruption Prevention** (`src/core/tiered-cache.ts:257`)
+#### 1. **Cache Corruption Prevention** (`src/core/bidirectional-cache.ts` — TieredCache section)
 ```typescript
 // CRITICAL: Always validate cached selectors - no blind trust!
 try {

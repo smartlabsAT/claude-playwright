@@ -28,24 +28,15 @@ export { DefaultMCPProtocolValidator, ProtocolError } from './core/protocol-vali
 export { ProtocolValidationLayer } from './core/protocol-validation-layer';
 export { ProtocolErrorRecovery } from './core/protocol-error-recovery';
 
-// Enhanced Cache Key System exports (Phase 2.2)
-export { EnhancedCacheKeyManager } from './core/enhanced-cache-key';
+// Cache migration system (Phase 2.2 — enhanced key types are internal now)
 export { CacheMigrationManager } from './core/cache-migration';
-export type { 
-  EnhancedCacheKey, 
-  CacheKeyComponents, 
-  StepsStructureAnalysis, 
-  URLPatternComponents 
-} from './core/enhanced-cache-key';
-export type { 
-  MigrationResult, 
-  MigrationOptions, 
-  EnhancedCacheEntry 
+export type {
+  MigrationResult,
+  MigrationOptions,
+  EnhancedCacheEntry
 } from './core/cache-migration';
 
-// Context-Aware Similarity System exports (Phase 2.3)
-export { ContextAwareSimilarity, SIMILARITY_THRESHOLDS, contextAwareSimilarity } from './core/context-aware-similarity';
-export type { SimilarityContext } from './core/context-aware-similarity';
+// Smart normalizer exports (context-aware similarity is now internal)
 export { SmartNormalizer } from './core/smart-normalizer';
 export type { NormalizationResult, InputFeatures } from './core/smart-normalizer';
 

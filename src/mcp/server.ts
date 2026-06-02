@@ -8,7 +8,7 @@ import { ErrorHelper } from '../utils/error-helper';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ProjectPaths } from '../utils/project-paths.js';
-import { EnhancedCacheIntegration } from '../core/enhanced-cache-integration.js';
+import { EnhancedCacheIntegration } from '../core/bidirectional-cache.js';
 import { TestScenarioCache } from '../core/test-scenario-cache.js';
 import { TestPatternMatcher } from '../core/test-pattern-matcher.js';
 import { ProtocolValidationLayer } from '../core/protocol-validation-layer.js';

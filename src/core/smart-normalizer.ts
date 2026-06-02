@@ -399,21 +399,18 @@ export class SmartNormalizer {
       domainMatch?: boolean;
     }
   ): number {
-    // Lazy load to avoid circular dependencies
-    const { contextAwareSimilarity } = require('./context-aware-similarity.js');
-    
     if (!context || !context.currentUrl) {
       // Fallback to basic Jaccard similarity
       return this.calculateJaccardSimilarity(text1, text2);
     }
-    
+
     const similarityContext = {
       currentUrl: context.currentUrl,
       profile: context.profile || 'default',
       domainMatch: context.domainMatch || false,
       operationType: context.operationType || 'default'
     };
-    
+
     return contextAwareSimilarity.calculateSimilarity(text1, text2, similarityContext);
   }
 
@@ -422,20 +419,17 @@ export class SmartNormalizer {
    * Returns -1 if actions conflict (should prevent matching)
    */
   calculateSimilarityWithActionDetection(text1: string, text2: string): number {
-    // Lazy load to avoid circular dependencies
-    const { contextAwareSimilarity } = require('./context-aware-similarity.js');
-    
     // Check for conflicting actions first
     if (contextAwareSimilarity.hasConflictingActions(text1, text2)) {
       return -1; // Special value indicating conflict
     }
-    
+
     // Check for exact action match boost
     const baseSimilarity = this.calculateJaccardSimilarity(text1, text2);
     if (contextAwareSimilarity.hasExactActionMatch(text1, text2)) {
       return Math.min(1, baseSimilarity + 0.2); // Boost exact matches
     }
-    
+
     return baseSimilarity;
   }
 
@@ -443,9 +437,6 @@ export class SmartNormalizer {
    * Get context-appropriate threshold for similarity matching
    */
   getThresholdForOperation(operationType: 'test_search' | 'cache_lookup' | 'pattern_match' | 'cross_env' | 'default' = 'default'): number {
-    // Lazy load to avoid circular dependencies
-    const { SIMILARITY_THRESHOLDS } = require('./context-aware-similarity.js');
-    
     return SIMILARITY_THRESHOLDS[operationType] || SIMILARITY_THRESHOLDS.default;
   }
 
@@ -453,10 +444,393 @@ export class SmartNormalizer {
    * Check if similarity meets context-appropriate threshold
    */
   meetsThresholdForOperation(
-    similarity: number, 
+    similarity: number,
     operationType: 'test_search' | 'cache_lookup' | 'pattern_match' | 'cross_env' | 'default' = 'default'
   ): boolean {
     const threshold = this.getThresholdForOperation(operationType);
     return similarity >= threshold;
   }
 }
+
+// ===========================================================================
+// Context-aware similarity (inlined from former context-aware-similarity.ts)
+// ===========================================================================
+
+/**
+ * Context information for similarity calculations
+ */
+export interface SimilarityContext {
+  /** Current URL for context */
+  currentUrl: string;
+
+  /** DOM signature for page state */
+  domSignature?: string;
+
+  /** Browser profile being used */
+  profile: string;
+
+  /** Whether domains match between contexts */
+  domainMatch: boolean;
+
+  /** Operation type context */
+  operationType?: 'test_search' | 'cache_lookup' | 'pattern_match' | 'cross_env' | 'default';
+
+  /** Additional context metadata */
+  metadata?: {
+    /** Environment type (local, staging, prod) */
+    environment?: string;
+
+    /** Page type (login, dashboard, settings) */
+    pageType?: string;
+
+    /** User intent confidence */
+    intentConfidence?: number;
+  };
+}
+
+/**
+ * Context-aware similarity threshold configuration
+ * Different use cases require different sensitivity levels
+ */
+export const SIMILARITY_THRESHOLDS = {
+  /** Stricter for test matching to prevent false positives */
+  test_search: 0.35,
+
+  /** Permissive for selector variation tolerance */
+  cache_lookup: 0.15,
+
+  /** Moderate for pattern recognition */
+  pattern_match: 0.25,
+
+  /** Very strict for cross-environment matching */
+  cross_env: 0.40,
+
+  /** Default fallback threshold */
+  default: 0.20
+} as const;
+
+/**
+ * Action conflict pairs - actions that should never match
+ */
+const ACTION_CONFLICTS: Record<string, string[]> = {
+  'login': ['logout', 'signout', 'disconnect'],
+  'logout': ['login', 'signin', 'connect'],
+  'create': ['delete', 'remove', 'destroy'],
+  'delete': ['create', 'add', 'new'],
+  'open': ['close', 'minimize', 'hide'],
+  'close': ['open', 'maximize', 'show'],
+  'start': ['stop', 'end', 'finish'],
+  'stop': ['start', 'begin', 'resume'],
+  'enable': ['disable', 'deactivate'],
+  'disable': ['enable', 'activate'],
+  'save': ['discard', 'cancel', 'reset'],
+  'cancel': ['save', 'submit', 'confirm']
+};
+
+/**
+ * Domain extraction for cross-environment matching
+ */
+function extractDomain(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname;
+  } catch {
+    return url.split('/')[0] || url;
+  }
+}
+
+/**
+ * Enhanced context-aware similarity calculation system
+ * Provides intelligent matching with action conflict detection and contextual thresholds
+ */
+export class ContextAwareSimilarity {
+  private normalizer: SmartNormalizer;
+
+  constructor() {
+    this.normalizer = new SmartNormalizer();
+  }
+
+  /**
+   * Calculate context-aware similarity between two texts
+   */
+  calculateSimilarity(
+    query: string,
+    candidate: string,
+    context: SimilarityContext
+  ): number {
+    if (!query || !candidate) return 0;
+
+    const queryNorm = this.normalizer.normalize(query);
+    const candidateNorm = this.normalizer.normalize(candidate);
+
+    let similarity = this.calculateBaseSimilarity(queryNorm, candidateNorm);
+    similarity = this.applyContextEnhancements(similarity, query, candidate, context);
+    similarity = this.applyActionLogic(similarity, queryNorm, candidateNorm);
+    similarity = this.applyDomainMatching(similarity, context);
+
+    return Math.max(0, Math.min(1, similarity));
+  }
+
+  hasExactActionMatch(query: string, candidate: string): boolean {
+    const queryActions = this.extractActions(query);
+    const candidateActions = this.extractActions(candidate);
+
+    return queryActions.some(qAction =>
+      candidateActions.some(cAction => qAction === cAction)
+    );
+  }
+
+  hasConflictingActions(query: string, candidate: string): boolean {
+    const queryActions = this.extractActions(query);
+    const candidateActions = this.extractActions(candidate);
+
+    for (const qAction of queryActions) {
+      const conflicts = ACTION_CONFLICTS[qAction] || [];
+      for (const cAction of candidateActions) {
+        if (conflicts.includes(cAction)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  getThresholdForContext(context: SimilarityContext): number {
+    if (context.operationType && context.operationType in SIMILARITY_THRESHOLDS) {
+      return SIMILARITY_THRESHOLDS[context.operationType];
+    }
+    return SIMILARITY_THRESHOLDS.default;
+  }
+
+  meetsThreshold(similarity: number, context: SimilarityContext): boolean {
+    const threshold = this.getThresholdForContext(context);
+    return similarity >= threshold;
+  }
+
+  private calculateBaseSimilarity(
+    queryNorm: NormalizationResult,
+    candidateNorm: NormalizationResult
+  ): number {
+    return this.normalizer.calculateSimilarity(queryNorm, candidateNorm);
+  }
+
+  private applyContextEnhancements(
+    baseSimilarity: number,
+    query: string,
+    candidate: string,
+    context: SimilarityContext
+  ): number {
+    let enhanced = baseSimilarity;
+
+    if (context.metadata?.environment) {
+      if (query.toLowerCase().includes(context.metadata.environment) ||
+          candidate.toLowerCase().includes(context.metadata.environment)) {
+        enhanced += 0.1;
+      }
+    }
+
+    if (context.metadata?.pageType) {
+      if (query.toLowerCase().includes(context.metadata.pageType) ||
+          candidate.toLowerCase().includes(context.metadata.pageType)) {
+        enhanced += 0.1;
+      }
+    }
+
+    if (context.metadata?.intentConfidence !== undefined) {
+      enhanced *= context.metadata.intentConfidence;
+    }
+
+    if (context.profile !== 'default') {
+      if (context.profile.includes('mobile') &&
+          (query.includes('tap') || candidate.includes('tap'))) {
+        enhanced += 0.05;
+      }
+    }
+
+    return enhanced;
+  }
+
+  private applyActionLogic(
+    similarity: number,
+    queryNorm: NormalizationResult,
+    candidateNorm: NormalizationResult
+  ): number {
+    const queryText = queryNorm.normalized;
+    const candidateText = candidateNorm.normalized;
+
+    if (this.hasExactActionMatch(queryText, candidateText)) {
+      similarity += 0.2;
+    }
+
+    if (this.hasConflictingActions(queryText, candidateText)) {
+      similarity -= 0.5;
+    }
+
+    const actionBoost = this.calculateActionSynonymBoost(queryText, candidateText);
+    similarity += actionBoost;
+
+    return similarity;
+  }
+
+  private applyDomainMatching(similarity: number, context: SimilarityContext): number {
+    if (context.domainMatch) {
+      return similarity + 0.05;
+    } else {
+      const domains = this.extractDomainPatterns(context.currentUrl);
+
+      if (domains.some(domain =>
+        ['localhost', 'staging', 'dev', 'test'].some(pattern =>
+          domain.includes(pattern)))) {
+        return similarity - 0.05;
+      }
+
+      return similarity - 0.1;
+    }
+  }
+
+  private extractActions(text: string): string[] {
+    const actions: string[] = [];
+    const normalized = text.toLowerCase();
+
+    const actionPatterns = [
+      /\b(click|tap|press|select|choose)\b/g,
+      /\b(type|enter|input|fill|write)\b/g,
+      /\b(navigate|go|open|visit|load)\b/g,
+      /\b(login|signin|authenticate)\b/g,
+      /\b(logout|signout|disconnect)\b/g,
+      /\b(create|add|new|make)\b/g,
+      /\b(delete|remove|destroy|clear)\b/g,
+      /\b(save|submit|confirm)\b/g,
+      /\b(cancel|discard|reset)\b/g,
+      /\b(start|begin|initiate)\b/g,
+      /\b(stop|end|finish|close)\b/g,
+      /\b(enable|activate|turn\s+on)\b/g,
+      /\b(disable|deactivate|turn\s+off)\b/g
+    ];
+
+    for (const pattern of actionPatterns) {
+      const matches = normalized.match(pattern);
+      if (matches) {
+        actions.push(...matches);
+      }
+    }
+
+    return [...new Set(actions)];
+  }
+
+  private calculateActionSynonymBoost(query: string, candidate: string): number {
+    const queryActions = this.extractActions(query);
+    const candidateActions = this.extractActions(candidate);
+
+    let boost = 0;
+
+    const synonymGroups = [
+      ['click', 'tap', 'press', 'select'],
+      ['type', 'enter', 'input', 'fill'],
+      ['navigate', 'go', 'open', 'visit'],
+      ['login', 'signin', 'authenticate'],
+      ['logout', 'signout', 'disconnect'],
+      ['create', 'add', 'new'],
+      ['delete', 'remove', 'destroy'],
+      ['save', 'submit', 'confirm'],
+      ['cancel', 'discard', 'reset']
+    ];
+
+    for (const group of synonymGroups) {
+      const queryHasSynonym = queryActions.some(action =>
+        group.some(synonym => action.includes(synonym))
+      );
+      const candidateHasSynonym = candidateActions.some(action =>
+        group.some(synonym => action.includes(synonym))
+      );
+
+      if (queryHasSynonym && candidateHasSynonym) {
+        boost += 0.1;
+      }
+    }
+
+    return Math.min(boost, 0.3);
+  }
+
+  private extractDomainPatterns(url: string): string[] {
+    const domain = extractDomain(url);
+    const parts = domain.split('.');
+
+    return [
+      domain,
+      ...parts,
+      parts.slice(-2).join('.')
+    ];
+  }
+
+  static createContext(
+    currentUrl: string,
+    operationType: 'test_search' | 'cache_lookup' | 'pattern_match' | 'cross_env' | 'default' = 'default',
+    options: Partial<SimilarityContext> = {}
+  ): SimilarityContext {
+    const context: SimilarityContext = {
+      currentUrl,
+      operationType: operationType as any,
+      profile: options.profile || 'default',
+      domainMatch: false,
+      ...options
+    };
+
+    if (options.domSignature && context.currentUrl) {
+      const currentDomain = extractDomain(context.currentUrl);
+      const contextDomain = extractDomain(options.domSignature);
+      context.domainMatch = currentDomain === contextDomain;
+    }
+
+    return context;
+  }
+
+  calculateSimilarityWithAutoContext(
+    query: string,
+    candidate: string,
+    currentUrl: string,
+    operationType: 'test_search' | 'cache_lookup' | 'pattern_match' | 'cross_env' | 'default' = 'default'
+  ): number {
+    const context = ContextAwareSimilarity.createContext(currentUrl, operationType);
+    return this.calculateSimilarity(query, candidate, context);
+  }
+
+  calculateBatchSimilarity(
+    query: string,
+    candidates: string[],
+    context: SimilarityContext
+  ): Array<{ candidate: string; similarity: number; meetsThreshold: boolean }> {
+    return candidates.map(candidate => {
+      const similarity = this.calculateSimilarity(query, candidate, context);
+      return {
+        candidate,
+        similarity,
+        meetsThreshold: this.meetsThreshold(similarity, context)
+      };
+    });
+  }
+
+  findBestMatches(
+    query: string,
+    candidates: string[],
+    context: SimilarityContext,
+    maxResults: number = 5
+  ): Array<{ candidate: string; similarity: number; rank: number }> {
+    const results = this.calculateBatchSimilarity(query, candidates, context)
+      .filter(result => result.meetsThreshold)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, maxResults);
+
+    return results.map((result, index) => ({
+      candidate: result.candidate,
+      similarity: result.similarity,
+      rank: index + 1
+    }));
+  }
+}
+
+/**
+ * Singleton instance for global usage
+ */
+export const contextAwareSimilarity = new ContextAwareSimilarity();

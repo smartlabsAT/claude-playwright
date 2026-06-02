@@ -4,7 +4,7 @@ import chalk from 'chalk';
 import path from 'path';
 import { ProjectPaths } from '../utils/project-paths.js';
 import fs from 'fs-extra';
-import { EnhancedCacheIntegration } from '../core/enhanced-cache-integration';
+import { EnhancedCacheIntegration } from '../core/bidirectional-cache';
 
 /**
  * Show comprehensive cache information and statistics

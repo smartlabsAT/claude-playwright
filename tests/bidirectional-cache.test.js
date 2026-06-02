@@ -4,7 +4,7 @@ const mcpServer = require('../dist/mcp/server.cjs');
 // Create test classes manually for testing
 const { SmartNormalizer } = require('../src/core/smart-normalizer.ts');
 const { BidirectionalCache } = require('../src/core/bidirectional-cache.ts');
-const { TieredCache } = require('../src/core/tiered-cache.ts');
+const { TieredCache } = require('../src/core/bidirectional-cache.ts');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');

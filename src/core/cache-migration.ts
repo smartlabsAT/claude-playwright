@@ -1,5 +1,8 @@
 import Database from 'better-sqlite3';
-import { EnhancedCacheKeyManager, EnhancedCacheKey, CacheKeyComponents } from './enhanced-cache-key.js';
+// Known circular import with bidirectional-cache.ts (it imports CacheMigrationManager from here).
+// Works at runtime because EnhancedCacheKeyManager is only used inside method bodies (deferred).
+// Should be untangled when the cache is redesigned in Epic 2.
+import { EnhancedCacheKeyManager, EnhancedCacheKey, CacheKeyComponents } from './bidirectional-cache.js';
 import { SmartNormalizer } from './smart-normalizer.js';
 import crypto from 'crypto';
 
