@@ -1,5 +1,12 @@
 # Issue #24: Critical Stability Improvements for v0.1.4
 
+> **Historical (v0.1.x):** This document describes stability fixes landed in
+> v0.1.4. All file/line references point at the **monolithic** `src/mcp/server.ts`
+> that was replaced in v0.2.0-alpha.1 by the layered proxy under `src/proxy/`.
+> The fixes themselves (browser-crash recovery, transaction handling, page
+> listener cleanup) live in the upstream `@playwright/mcp` execution layer or
+> have been re-implemented in the proxy. Kept for historical context.
+
 ## Problem
 Users are abandoning claude-playwright-toolkit v0.1.3 due to stability issues and crashes.
 

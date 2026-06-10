@@ -1,5 +1,17 @@
 # Claude Playwright MCP Server Documentation
 
+> **Status note (v0.2.0-alpha.1):** The MCP server was re-architected in v0.2.0
+> as a thin routing layer over an upstream MCP execution layer. The **23 core
+> browser tools** (`browser_navigate`, `browser_click`, `browser_type`,
+> `browser_screenshot`, `browser_evaluate`, `browser_snapshot`,
+> `browser_console_messages`, `browser_network_requests`, etc.) are fully
+> functional. The **session, test-management, and cache-status tools** described
+> further down (`browser_session_*`, `browser_save_test`, `browser_run_test`,
+> `browser_cache_status`, ...) are **temporarily unavailable in alpha.1** — they
+> are restored as in-process local tools in a later v0.2.0 milestone. CLI
+> equivalents (`claude-playwright session …`, `… test …`, `… cache …`) work
+> unchanged.
+
 ## Overview
 
 The Claude Playwright MCP server provides Claude Code with comprehensive browser automation capabilities through the Model Context Protocol (MCP). This TypeScript-based server enables Claude to control browsers, interact with web pages, and manage persistent sessions.

@@ -15,7 +15,7 @@ export default defineConfig([
     noExternal: ['lru-cache', 'chalk', 'commander', 'fs-extra'], // Bundle these
     outDir: 'dist/cli'
   },
-  // MCP Server (will be TypeScript soon)
+  // MCP Server shim (backward-compat entry; re-exports the proxy server)
   {
     entry: ['src/mcp/server.ts'],
     format: ['cjs', 'esm'],
@@ -24,10 +24,29 @@ export default defineConfig([
     sourcemap: true,
     clean: false, // Don't clean since CLI already did
     splitting: false,
-    bundle: true, // Bundle local dependencies
-    external: ['@modelcontextprotocol/sdk', 'playwright', 'zod', 'better-sqlite3', /^node:/],
+    bundle: true,
+    external: ['@modelcontextprotocol/sdk', '@playwright/mcp', 'playwright', 'zod', 'better-sqlite3', /^node:/],
     noExternal: ['lru-cache', 'chalk', 'fs-extra'],
     outDir: 'dist/mcp',
+    outExtension({ format }) {
+      return {
+        js: format === 'cjs' ? '.cjs' : '.js'
+      };
+    }
+  },
+  // Proxy server (real implementation — routes between local tools and @playwright/mcp)
+  {
+    entry: ['src/proxy/proxy-server.ts'],
+    format: ['cjs', 'esm'],
+    target: 'node18',
+    dts: true,
+    sourcemap: true,
+    clean: false,
+    splitting: false,
+    bundle: true,
+    external: ['@modelcontextprotocol/sdk', '@playwright/mcp', 'playwright', 'better-sqlite3', /^node:/],
+    noExternal: ['lru-cache', 'chalk', 'fs-extra'],
+    outDir: 'dist/proxy',
     outExtension({ format }) {
       return {
         js: format === 'cjs' ? '.cjs' : '.js'
