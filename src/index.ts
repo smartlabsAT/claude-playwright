@@ -23,11 +23,6 @@ export { ProjectPaths } from './utils/project-paths';
 export { DOMSignatureManager, DOMSignatureUtils } from './utils/dom-signature';
 export type { DOMSignatureResult, DOMSignatureOptions, ElementSignature } from './utils/dom-signature';
 
-// Protocol Validation exports (Phase 0)
-export { DefaultMCPProtocolValidator, ProtocolError } from './core/protocol-validator';
-export { ProtocolValidationLayer } from './core/protocol-validation-layer';
-export { ProtocolErrorRecovery } from './core/protocol-error-recovery';
-
 // Cache migration system (Phase 2.2 — enhanced key types are internal now)
 export { CacheMigrationManager } from './core/cache-migration';
 export type {

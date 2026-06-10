@@ -1,5 +1,14 @@
 # Intelligent Test Persistence & Management
 
+> **Status note (v0.2.0-alpha.1):** The **MCP tools** described below
+> (`browser_save_test`, `browser_find_similar_tests`, `browser_run_test`,
+> `browser_test_library`, `browser_suggest_actions`, `browser_adapt_test`,
+> `browser_delete_test`) are **temporarily unavailable** in v0.2.0-alpha.1.
+> The underlying engine (`TestScenarioCache`, `TestPatternMatcher`, the SQLite
+> store) is untouched and still drives the **CLI commands**
+> (`claude-playwright test save/find/run/adapt/list/stats/delete`). The MCP
+> tools are restored as in-process local tools in a later v0.2.0 milestone.
+
 ## 🎯 Overview
 
 The Claude Playwright Toolkit features an intelligent test management system that automatically saves, rediscovers, and adapts tests to new contexts. This system uses AI-powered pattern recognition and an advanced cache architecture.

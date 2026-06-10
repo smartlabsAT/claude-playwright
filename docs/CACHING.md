@@ -325,9 +325,15 @@ try {
 }
 ```
 
-#### 2. **Session Performance Optimization** (`src/mcp/server.ts:810`)
+#### 2. **Session Performance Optimization** (v0.1.x — superseded in v0.2.0-alpha.1)
+The original v0.1.x MCP server kept the browser instance alive while swapping
+contexts on session restore (saved 50–60% startup time vs. a full browser
+restart). In v0.2.0-alpha.1 the MCP server is a thin proxy and the browser is
+owned by the upstream execution layer (`@playwright/mcp`); session restore is
+re-introduced as a proxy-side `restartWith(options)` flow in a later v0.2.0
+milestone. The snippet below documents the v0.1.x technique for reference:
 ```typescript
-// PERFORMANCE: Browser hot-swapping instead of complete restart
+// PERFORMANCE (v0.1.x): Browser hot-swapping instead of complete restart
 if (browser && context) {
   console.error(`[Claude-Playwright MCP] Switching to session: ${sessionName} (keeping browser alive)...`);
   if (context) await context.close(); // Only close context, keep browser

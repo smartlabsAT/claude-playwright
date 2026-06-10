@@ -68,11 +68,12 @@
     "email": "support@smartlabs.at"
   },
   "engines": {
-    "node": ">=16.0.0",
+    "node": ">=18.0.0",
     "npm": ">=7.0.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.4",
+    "@playwright/mcp": "0.0.75",
     "@types/better-sqlite3": "^7.6.13",
     "better-sqlite3": "^12.2.0",
     "chalk": "^4.1.2",

@@ -110,11 +110,11 @@ export function createMcpCommand(): Command {
       console.log('1. Restart Claude Code to load the MCP server');
       console.log('2. Use /mcp command in Claude Code to verify connection');
       console.log('3. Start using browser automation tools!\n');
-      console.log(chalk.dim('Available tools:'));
-      console.log(chalk.dim('- browser_navigate, browser_click, browser_type'));
-      console.log(chalk.dim('- browser_session_save, browser_session_restore'));
+      console.log(chalk.dim('Available tools (v0.2.0-alpha.1 baseline, 23 browser tools):'));
+      console.log(chalk.dim('- browser_navigate, browser_click, browser_type, browser_fill_form'));
       console.log(chalk.dim('- browser_console_messages, browser_network_requests'));
-      console.log(chalk.dim('- browser_screenshot, browser_evaluate, and more...'));
+      console.log(chalk.dim('- browser_screenshot, browser_evaluate, browser_snapshot, and more...'));
+      console.log(chalk.dim('Note: session/test/cache tools return in a later v0.2.0 milestone.'));
       console.log(chalk.dim('\nRun "claude-playwright mcp docs" for full documentation'));
     });
 
